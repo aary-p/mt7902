@@ -41,6 +41,18 @@
 #define HOST_TX_DONE_INT_ENA16		BIT(26)
 #define HOST_TX_DONE_INT_ENA17		BIT(27)
 
+/* MT7902 specific RX bits */
+#define MT_RX_DONE_BIT0             BIT(0)
+#define MT_RX_DONE_BIT1             BIT(1)
+#define MT_RX_DONE_BIT2             BIT(2)
+#define MT_RX_DONE_BIT3             BIT(3)
+
+/* MT7902 specific TX bits */
+#define MT_TX_DONE_BIT_DATA0        BIT(0)
+#define MT_TX_DONE_BIT_DATA1        BIT(1)
+#define MT_TX_DONE_BIT_FWDL         BIT(26)
+#define MT_TX_DONE_BIT_CMD          BIT(27)
+
 /* WFDMA interrupt */
 #define MT_INT_RX_DONE_DATA		HOST_RX_DONE_INT_ENA2
 #define MT_INT_RX_DONE_WM		HOST_RX_DONE_INT_ENA0
