@@ -26,6 +26,8 @@ static const struct pci_device_id mt7921_pci_device_table[] = {
 		.driver_data = (kernel_ulong_t)MT7922_FIRMWARE_WM },
 	{ PCI_DEVICE(PCI_VENDOR_ID_MEDIATEK, 0x7920),
 		.driver_data = (kernel_ulong_t)MT7920_FIRMWARE_WM },
+	{ PCI_DEVICE(PCI_VENDOR_ID_MEDIATEK, 0x7902),
+		.driver_data = (kernel_ulong_t)MT7902_FIRMWARE_WM },
 	{ },
 };
 
@@ -573,6 +575,8 @@ static struct pci_driver mt7921_pci_driver = {
 module_pci_driver(mt7921_pci_driver);
 
 MODULE_DEVICE_TABLE(pci, mt7921_pci_device_table);
+MODULE_FIRMWARE(MT7902_FIRMWARE_WM);
+MODULE_FIRMWARE(MT7902_ROM_PATCH);
 MODULE_FIRMWARE(MT7920_FIRMWARE_WM);
 MODULE_FIRMWARE(MT7920_ROM_PATCH);
 MODULE_FIRMWARE(MT7921_FIRMWARE_WM);
