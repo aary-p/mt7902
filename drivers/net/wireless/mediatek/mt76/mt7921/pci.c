@@ -319,6 +319,17 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 			.wm2_complete_mask = MT_INT_RX_DONE_WM2,
 		},
 	};
+	static const struct mt792x_irq_map mt7902_irq_map = {
+		.host_irq_enable = MT_WFDMA0_HOST_INT_ENA,
+		.tx = {
+			.all_complete_mask = MT7902_INT_TX_DONE_ALL,
+			.mcu_complete_mask = MT7902_INT_TX_DONE_MCU,
+		},
+		.rx = {
+			.data_complete_mask = MT7902_INT_RX_DONE_DATA,
+			.wm_complete_mask = MT7902_INT_RX_DONE_WM,
+		},
+	};
 	struct ieee80211_ops *ops;
 	struct mt76_bus_ops *bus_ops;
 	struct mt792x_dev *dev;
@@ -368,10 +379,15 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 
 	pci_set_drvdata(pdev, mdev);
 
+	chipid = mt7921_l1_rr(dev, MT_HW_CHIPID);
+
 	dev = container_of(mdev, struct mt792x_dev, mt76);
 	dev->fw_features = features;
 	dev->hif_ops = &mt7921_pcie_ops;
-	dev->irq_map = &irq_map;
+	if (chipid == 0x7902)
+		dev->irq_map = &mt7902_irq_map;
+	else
+		dev->irq_map = &irq_map;
 	mt76_mmio_init(&dev->mt76, pcim_iomap_table(pdev)[0]);
 	tasklet_init(&mdev->irq_tasklet, mt792x_irq_tasklet, (unsigned long)dev);
 
@@ -402,7 +418,6 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 	if (ret)
 		goto err_free_dev;
 
-	chipid = mt7921_l1_rr(dev, MT_HW_CHIPID);
 	if (chipid == 0x7961 && (mt7921_l1_rr(dev, MT_HW_BOUND) & BIT(7)))
 		chipid = 0x7920;
 	mdev->rev = (chipid << 16) |
