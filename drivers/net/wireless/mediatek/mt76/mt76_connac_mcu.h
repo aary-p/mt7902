@@ -1326,9 +1326,12 @@ enum {
 
 /* offload mcu commands */
 enum {
+	MCU_CE_CMD_MAGIC = 0x00,	
 	MCU_CE_CMD_TEST_CTRL = 0x01,
+	MCU_CE_CMD_BASIC_CONFIG = 0x02,
 	MCU_CE_CMD_START_HW_SCAN = 0x03,
 	MCU_CE_CMD_SET_PS_PROFILE = 0x05,
+	MCU_CE_CMD_BSS_ACTIVATE_CTRL = 0x11,
 	MCU_CE_CMD_SET_RX_FILTER = 0x0a,
 	MCU_CE_CMD_SET_CHAN_DOMAIN = 0x0f,
 	MCU_CE_CMD_SET_BSS_CONNECTED = 0x16,
@@ -1567,6 +1570,57 @@ struct mt76_connac_hw_scan_req {
 	u8 random_mac[ETH_ALEN]; /* valid when BIT(1) in scan_func is set. */
 	u8 pad[63];
 	u8 ssid_type_ext;
+} __packed;
+
+struct mt76_connac_hw_scan_req_2 {
+	u8 seq_num;
+	u8 bss_idx;
+	u8 scan_type; /* 0: PASSIVE SCAN
+		       * 1: ACTIVE SCAN
+		       */
+	u8 ssid_type; /* BIT(0) wildcard SSID
+		       * BIT(1) P2P wildcard SSID
+		       * BIT(2) specified SSID + wildcard SSID
+		       * BIT(2) + ssid_type_ext BIT(0) specified SSID only
+		       */
+	u8 ssids_num;
+	u8 probe_req_num; /* Number of probe request for each SSID */
+	u8 scan_func; /* BIT(0) Enable random MAC scan
+		       * BIT(1) Disable DBDC scan type 1~3.
+		       * BIT(2) Use DBDC scan type 3 (dedicated one RF to scan).
+		       */
+	u8 version; /* 0: Not support fields after ies.
+		     * 1: Support fields after ies.
+		     */
+	struct mt76_connac_mcu_scan_ssid ssids[4];
+	__le16 probe_delay_time;
+	__le16 channel_dwell_time; /* channel Dwell interval */
+	__le16 timeout_value;
+	u8 channel_type; /* 0: Full channels
+			  * 1: Only 2.4GHz channels
+			  * 2: Only 5GHz channels
+			  * 3: P2P social channel only (channel #1, #6 and #11)
+			  * 4: Specified channels
+			  * Others: Reserved
+			  */
+	u8 channels_num; /* valid when channel_type is 4 */
+	/* valid when channels_num is set */
+	struct mt76_connac_mcu_scan_channel channels[32];
+	__le16 ies_len;
+	u8 ies[MT76_CONNAC_SCAN_IE_LEN];
+	/* following fields are valid if version > 0 */
+	u8 ext_channels_num;
+	u8 ext_ssids_num;
+	__le16 channel_min_dwell_time;
+	struct mt76_connac_mcu_scan_channel ext_channels[32];
+	struct mt76_connac_mcu_scan_ssid ext_ssids[6];
+	u8 bssid[ETH_ALEN];
+	u8 random_mac[ETH_ALEN]; /* valid when BIT(1) in scan_func is set. */
+	u8 ext_bssid[4][ETH_ALEN];
+	u8 short_ssid_num;
+	u8 bssid_match_ch[4];
+	u8 bssid_match_ssid_ind[4];
+	u8 pad[31];
 } __packed;
 
 #define MT76_CONNAC_SCAN_DONE_EVENT_MAX_CHANNEL_NUM		64
@@ -1823,6 +1877,22 @@ struct mt76_connac_mcu_reg_event {
 	__le32 val;
 } __packed;
 
+struct mt7902_bss_activate_ctrl {
+	u8  ucBssIndex;
+	u8  ucActive;
+	u8  ucNetworkType;
+	u8  ucOwnMacAddrIndex;
+	u8  aucBssMacAddr[6];
+	u8  ucBMCWlanIndex;
+	u8  ucReserved; /* Padding to 12 bytes */
+} __packed;
+
+struct CMD_POWER_SAVE_MODE {
+	uint8_t  ucBssIndex;
+	uint8_t  ucPowerMode;
+	uint8_t  aucReserved[2];
+};
+
 static inline enum mcu_cipher_type
 mt76_connac_mcu_get_cipher(int cipher)
 {
@@ -1863,7 +1933,7 @@ mt76_connac_mcu_gen_dl_mode(struct mt76_dev *dev, u8 feature_set, bool is_wa)
 
 	ret |= feature_set & FW_FEATURE_SET_ENCRYPT ?
 	       DL_MODE_ENCRYPT | DL_MODE_RESET_SEC_IV : 0;
-	if (is_mt7921(dev) || is_mt7925(dev))
+	if (is_mt7921(dev) || is_mt7925(dev) || is_mt7902(dev))
 		ret |= feature_set & FW_FEATURE_ENCRY_MODE ?
 		       DL_CONFIG_ENCRY_MODE_SEL : 0;
 	ret |= FIELD_PREP(DL_MODE_KEY_IDX,
@@ -2065,4 +2135,7 @@ int mt76_connac2_load_ram(struct mt76_dev *dev, const char *fw_wm,
 int mt76_connac2_load_patch(struct mt76_dev *dev, const char *fw_name);
 int mt76_connac2_mcu_fill_message(struct mt76_dev *mdev, struct sk_buff *skb,
 				  int cmd, int *wait_seq);
+int mt76_mcu_add_dev_info(struct mt76_phy *phy, 
+			    struct ieee80211_bss_conf *bss_conf, 
+			    struct mt76_vif_link *mvif, bool enable);
 #endif /* __MT76_CONNAC_MCU_H */

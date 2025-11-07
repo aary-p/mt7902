@@ -66,6 +66,7 @@ int mt76_connac_mcu_init_download(struct mt76_dev *dev, u32 addr, u32 len,
 
 	if ((!is_connac_v1(dev) && addr == MCU_PATCH_ADDRESS) ||
 	    (is_mt7921(dev) && addr == 0x900000) ||
+	    (is_mt7902(dev) && addr == 0x900000) ||
 	    (is_mt7925(dev) && (addr == 0x900000 || addr == 0xe0002800)) ||
 	    (is_mt799x(dev) && addr == 0x900000))
 		cmd = MCU_CMD(PATCH_START_REQ);
@@ -95,9 +96,9 @@ int mt76_connac_mcu_set_channel_domain(struct mt76_phy *phy)
 		u8 n_6ch;
 		u8 pad2;
 	} __packed hdr = {
-		.bw_2g = 0,
-		.bw_5g = 3, /* BW_20_40_80_160M */
-		.bw_6g = 3,
+		.bw_2g = 1,
+		.bw_5g = 0, /* BW_20_40_80_160M */
+		.bw_6g = 0,
 	};
 	struct mt76_connac_mcu_chan {
 		__le16 hw_value;
@@ -107,6 +108,11 @@ int mt76_connac_mcu_set_channel_domain(struct mt76_phy *phy)
 	struct mt76_dev *dev = phy->dev;
 	struct ieee80211_channel *chan;
 	struct sk_buff *skb;
+	
+	printk(KERN_INFO "MT7902: Sending SET_CHAN_DOMAIN\n");
+	printk(KERN_INFO "MT7902: 2g channels: %u\n", phy->sband_2g.sband.n_channels);
+	printk(KERN_INFO "MT7902: 5g channels: %u\n", phy->sband_5g.sband.n_channels);
+	printk(KERN_INFO "MT7902: 6g channels: %u\n", phy->sband_6g.sband.n_channels);
 
 	n_max_channels = phy->sband_2g.sband.n_channels +
 			 phy->sband_5g.sband.n_channels +
@@ -163,6 +169,12 @@ int mt76_connac_mcu_set_channel_domain(struct mt76_phy *phy)
 	hdr.n_6ch = n_6ch;
 
 	memcpy(__skb_push(skb, sizeof(hdr)), &hdr, sizeof(hdr));
+	
+	/* --- START: ADD THESE PRINT STATEMENTS FOR DEBUGGING --- */
+	printk(KERN_INFO "  alpha2: 0x%X%X\n", hdr.alpha2[0], hdr.alpha2[1]);
+	printk(KERN_INFO "  bw_2g: %u, bw_5g: %u, bw_6g: %u\n", hdr.bw_2g, hdr.bw_5g, hdr.bw_6g);
+	printk(KERN_INFO "  n_channels (2/5/6G): %u / %u / %u\n", hdr.n_2ch, hdr.n_5ch, hdr.n_6ch);
+	/* --- END: ADD THESE PRINT STATEMENTS FOR DEBUGGING --- */
 
 	return mt76_mcu_skb_send_msg(dev, skb, MCU_CE_CMD(SET_CHAN_DOMAIN),
 				     false);
@@ -1144,6 +1156,7 @@ int mt76_connac_mcu_uni_add_dev(struct mt76_phy *phy,
 				struct mt76_wcid *wcid,
 				bool enable)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_uni_add_dev\n");
 	struct mt76_dev *dev = phy->dev;
 	struct {
 		struct {
@@ -1224,6 +1237,31 @@ int mt76_connac_mcu_uni_add_dev(struct mt76_phy *phy,
 	cmd = enable ? MCU_UNI_CMD(DEV_INFO_UPDATE) : MCU_UNI_CMD(BSS_INFO_UPDATE);
 	data = enable ? (void *)&dev_req : (void *)&basic_req;
 	len = enable ? sizeof(dev_req) : sizeof(basic_req);
+	
+	printk(KERN_INFO "MT7902: add_dev: Sending FIRST message (cmd=0x%x, len=%d)\n", cmd, len);
+	if (enable) {
+		/* This is dev_req */
+		printk(KERN_INFO "MT7902:  dev_req.hdr.omac_idx: %u\n", dev_req.hdr.omac_idx);
+		printk(KERN_INFO "MT7902:  dev_req.hdr.band_idx: %u\n", dev_req.hdr.band_idx);
+		printk(KERN_INFO "MT7902:  dev_req.tlv.tag: 0x%x\n", le16_to_cpu(dev_req.tlv.tag));
+		printk(KERN_INFO "MT7902:  dev_req.tlv.len: %u\n", le16_to_cpu(dev_req.tlv.len));
+		printk(KERN_INFO "MT7902:  dev_req.tlv.active: %d\n", dev_req.tlv.active);
+		printk(KERN_INFO "MT7902:  dev_req.tlv.link_idx: %u\n", dev_req.tlv.link_idx);
+		printk(KERN_INFO "MT7902:  dev_req.tlv.omac_addr: %pM\n", dev_req.tlv.omac_addr);
+	} else {
+		/* This is basic_req */
+		printk(KERN_INFO "MT7902:  basic_req.hdr.bss_idx: %u\n", basic_req.hdr.bss_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.tag: 0x%x\n", le16_to_cpu(basic_req.basic.tag));
+		printk(KERN_INFO "MT7902:  basic_req.basic.len: %u\n", le16_to_cpu(basic_req.basic.len));
+		printk(KERN_INFO "MT7902:  basic_req.basic.conn_type: 0x%x\n", le32_to_cpu(basic_req.basic.conn_type));
+		printk(KERN_INFO "MT7902:  basic_req.basic.omac_idx: %u\n", basic_req.basic.omac_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.band_idx: %u\n", basic_req.basic.band_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.wmm_idx: %u\n", basic_req.basic.wmm_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.active: %d\n", basic_req.basic.active);
+		printk(KERN_INFO "MT7902:  basic_req.basic.hw_bss_idx: %u\n", basic_req.basic.hw_bss_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.bmc_tx_wlan_idx: %u\n", le16_to_cpu(basic_req.basic.bmc_tx_wlan_idx));
+		printk(KERN_INFO "MT7902:  basic_req.basic.sta_idx: %u\n", le16_to_cpu(basic_req.basic.sta_idx));
+	}
 
 	err = mt76_mcu_send_msg(dev, cmd, data, len, true);
 	if (err < 0)
@@ -1231,7 +1269,32 @@ int mt76_connac_mcu_uni_add_dev(struct mt76_phy *phy,
 
 	cmd = enable ? MCU_UNI_CMD(BSS_INFO_UPDATE) : MCU_UNI_CMD(DEV_INFO_UPDATE);
 	data = enable ? (void *)&basic_req : (void *)&dev_req;
-	len = enable ? sizeof(basic_req) : sizeof(dev_req);
+	len = enable ? sizeof(basic_req) : sizeof(dev_req);                                  
+	
+	printk(KERN_INFO "MT7902: add_dev: Sending SECOND message (cmd=0x%x, len=%d)\n", cmd, len);
+	if (!enable) {
+		/* This is dev_req */
+		printk(KERN_INFO "MT7902:  dev_req.hdr.omac_idx: %u\n", dev_req.hdr.omac_idx);
+		printk(KERN_INFO "MT7902:  dev_req.hdr.band_idx: %u\n", dev_req.hdr.band_idx);
+		printk(KERN_INFO "MT7902:  dev_req.tlv.tag: 0x%x\n", le16_to_cpu(dev_req.tlv.tag));
+		printk(KERN_INFO "MT7902:  dev_req.tlv.len: %u\n", le16_to_cpu(dev_req.tlv.len));
+		printk(KERN_INFO "MT7902:  dev_req.tlv.active: %d\n", dev_req.tlv.active);
+		printk(KERN_INFO "MT7902:  dev_req.tlv.link_idx: %u\n", dev_req.tlv.link_idx);
+		printk(KERN_INFO "MT7902:  dev_req.tlv.omac_addr: %pM\n", dev_req.tlv.omac_addr);
+	} else {
+		/* This is basic_req */
+		printk(KERN_INFO "MT7902:  basic_req.hdr.bss_idx: %u\n", basic_req.hdr.bss_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.tag: 0x%x\n", le16_to_cpu(basic_req.basic.tag));
+		printk(KERN_INFO "MT7902:  basic_req.basic.len: %u\n", le16_to_cpu(basic_req.basic.len));
+		printk(KERN_INFO "MT7902:  basic_req.basic.conn_type: 0x%x\n", le32_to_cpu(basic_req.basic.conn_type));
+		printk(KERN_INFO "MT7902:  basic_req.basic.omac_idx: %u\n", basic_req.basic.omac_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.band_idx: %u\n", basic_req.basic.band_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.wmm_idx: %u\n", basic_req.basic.wmm_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.active: %d\n", basic_req.basic.active);
+		printk(KERN_INFO "MT7902:  basic_req.basic.hw_bss_idx: %u\n", basic_req.basic.hw_bss_idx);
+		printk(KERN_INFO "MT7902:  basic_req.basic.bmc_tx_wlan_idx: %u\n", le16_to_cpu(basic_req.basic.bmc_tx_wlan_idx));
+		printk(KERN_INFO "MT7902:  basic_req.basic.sta_idx: %u\n", le16_to_cpu(basic_req.basic.sta_idx));
+	}
 
 	return mt76_mcu_send_msg(dev, cmd, data, len, true);
 }
@@ -1459,6 +1522,7 @@ mt76_connac_mcu_uni_bss_he_tlv(struct mt76_phy *phy, struct ieee80211_vif *vif,
 int mt76_connac_mcu_uni_set_chctx(struct mt76_phy *phy, struct mt76_vif_link *mvif,
 				  struct ieee80211_chanctx_conf *ctx)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_uni_set_chctx (contains uni commands)\n");
 	struct cfg80211_chan_def *chandef = ctx ? &ctx->def : &phy->chandef;
 	int freq1 = chandef->center_freq1, freq2 = chandef->center_freq2;
 	enum nl80211_band band = chandef->chan->band;
@@ -1544,6 +1608,7 @@ int mt76_connac_mcu_uni_add_bss(struct mt76_phy *phy,
 				bool enable,
 				struct ieee80211_chanctx_conf *ctx)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_uni_add_bss (contains uni commands)\n");
 	struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
 	struct cfg80211_chan_def *chandef = ctx ? &ctx->def : &phy->chandef;
 	enum nl80211_band band = chandef->chan->band;
@@ -1741,10 +1806,14 @@ int mt76_connac_mcu_hw_scan(struct mt76_phy *phy, struct ieee80211_vif *vif,
 	struct mt76_dev *mdev = phy->dev;
 	struct mt76_connac_mcu_scan_channel *chan;
 	struct mt76_connac_hw_scan_req *req;
+//	struct mt76_connac_hw_scan_req_2 *req; //gen4m struct
 	struct sk_buff *skb;
 
-	if (test_bit(MT76_HW_SCANNING, &phy->state))
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_hw_scan\n");
+
+	if (test_bit(MT76_HW_SCANNING, &phy->state)) {
 		return -EBUSY;
+	}
 
 	skb = mt76_mcu_msg_alloc(mdev, NULL, sizeof(*req));
 	if (!skb)
@@ -1754,7 +1823,7 @@ int mt76_connac_mcu_hw_scan(struct mt76_phy *phy, struct ieee80211_vif *vif,
 	mvif->scan_seq_num = (mvif->scan_seq_num + 1) & 0x7f;
 
 	req = (struct mt76_connac_hw_scan_req *)skb_put_zero(skb, sizeof(*req));
-
+	
 	req->seq_num = mvif->scan_seq_num | mvif->band_idx << 7;
 	req->bss_idx = mvif->idx;
 	req->scan_type = sreq->n_ssids ? 1 : 0;
@@ -1770,6 +1839,7 @@ int mt76_connac_mcu_hw_scan(struct mt76_phy *phy, struct ieee80211_vif *vif,
 		       sreq->ssids[i].ssid_len);
 		n_ssids++;
 	}
+	
 	req->ssid_type = n_ssids ? BIT(2) : BIT(0);
 	req->ssid_type_ext = n_ssids ? BIT(0) : 0;
 	req->ssids_num = n_ssids;
@@ -1816,16 +1886,51 @@ int mt76_connac_mcu_hw_scan(struct mt76_phy *phy, struct ieee80211_vif *vif,
 		memcpy(req->ies, sreq->ie, sreq->ie_len);
 		req->ies_len = cpu_to_le16(sreq->ie_len);
 	}
-
+	//Change SCAN_FUNC_SPLIT_SCAN to 0x2 for gen4m
 	if (is_mt7921(phy->dev))
 		req->scan_func |= SCAN_FUNC_SPLIT_SCAN;
 
-	memcpy(req->bssid, sreq->bssid, ETH_ALEN);
+//	eth_zero_addr(req->bssid); //gen4m
+	memcpy(req->bssid, sreq->bssid, ETH_ALEN); //mt76
+	
 	if (sreq->flags & NL80211_SCAN_FLAG_RANDOM_ADDR) {
 		get_random_mask_addr(req->random_mac, sreq->mac_addr,
 				     sreq->mac_addr_mask);
 		req->scan_func |= SCAN_FUNC_RANDOM_MAC;
 	}
+	
+	printk(KERN_INFO "MT7902: --- START CMD_ID_SCAN_REQ_V2 (0x03) PAYLOAD ---\n");
+	printk(KERN_INFO "MT7902: \tgen4m log: (Seq=1, BssIdx=0, ScanType=1, SSIDType=1)\n");
+	printk(KERN_INFO "MT7902: \tmt76: seq_num=0x%x, bss_idx=%u, scan_type=%u, ssid_type=0x%x, ssids_num=%u\n",
+		req->seq_num, req->bss_idx, req->scan_type, req->ssid_type, req->ssids_num);
+
+	printk(KERN_INFO "MT7902: \tgen4m log: (Ver=1, FuncMask=0x2)\n");
+	printk(KERN_INFO "MT7902: \tmt76: version=%u, scan_func=0x%x\n",
+		req->version, req->scan_func);
+
+	printk(KERN_INFO "MT7902: \tgen4m log: (DwellTime=0, MinDwellTime=0)\n");
+	printk(KERN_INFO "MT7902: \tmt76: duration(var)=%d, channel_dwell_time=%u, channel_min_dwell_time=%u\n",
+		duration, le16_to_cpu(req->channel_dwell_time), le16_to_cpu(req->channel_min_dwell_time));
+
+	printk(KERN_INFO "MT7902: \tgen4m log: (ChnlType=4, ChnlNum=32, ChnlExtNum=22)\n");
+	printk(KERN_INFO "MT7902: \tmt76: channel_type=%u, channels_num=%u, ext_channels_num=%u\n",
+		req->channel_type, req->channels_num, req->ext_channels_num);
+
+	printk(KERN_INFO "MT7902: \tmt76: Channel List (Main):\n");
+	for (i = 0; i < req->channels_num; i++)
+		printk(KERN_INFO "MT7902: \t\tCh[%d]: Band=%u, Num=%u\n", i,
+			req->channels[i].band, req->channels[i].channel_num);
+
+	printk(KERN_INFO "MT7902: \tmt76: Channel List (Ext):\n");
+	for (i = 0; i < req->ext_channels_num; i++)
+		printk(KERN_INFO "MT7902: \t\tExtCh[%d]: Band=%u, Num=%u\n", i,
+			req->ext_channels[i].band, req->ext_channels[i].channel_num);
+
+	printk(KERN_INFO "MT7902: \tgen4m log: (BSSID=00:00:00:00:00:00)\n");
+	printk(KERN_INFO "MT7902: \tmt76: bssid= %pM \n", req->bssid);
+	printk(KERN_INFO "MT7902: \tmt76: random_mac= %pM \n", req->random_mac);
+	printk(KERN_INFO "MT7902: \tmt76: ies_len=%u\n", le16_to_cpu(req->ies_len));
+	printk(KERN_INFO "MT7902: --- END CMD_ID_SCAN_REQ_V2 (0x03) PAYLOAD ---\n");
 
 	err = mt76_mcu_skb_send_msg(mdev, skb, MCU_CE_CMD(START_HW_SCAN),
 				    false);
@@ -2280,6 +2385,7 @@ int mt76_connac_mcu_update_arp_filter(struct mt76_dev *dev,
 				      struct mt76_vif_link *vif,
 				      struct ieee80211_bss_conf *info)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_update_arp_filter (contains uni commands)\n");
 	struct ieee80211_vif *mvif = container_of(info, struct ieee80211_vif,
 						  bss_conf);
 	struct sk_buff *skb;
@@ -2387,6 +2493,7 @@ int mt76_connac_mcu_update_gtk_rekey(struct ieee80211_hw *hw,
 				     struct ieee80211_vif *vif,
 				     struct cfg80211_gtk_rekey_data *key)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_update_gtk_rekey (contains uni commands)\n");
 	struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
 	struct mt76_connac_gtk_rekey_tlv *gtk_tlv;
 	struct mt76_phy *phy = hw->priv;
@@ -2428,6 +2535,7 @@ static int
 mt76_connac_mcu_set_arp_filter(struct mt76_dev *dev, struct ieee80211_vif *vif,
 			       bool suspend)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_set_arp_filter (contains uni commands)\n");
 	struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
 	struct {
 		struct {
@@ -2454,6 +2562,7 @@ int
 mt76_connac_mcu_set_gtk_rekey(struct mt76_dev *dev, struct ieee80211_vif *vif,
 			      bool suspend)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_set_gtk_rekey (contains uni commands)\n");
 	struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
 	struct {
 		struct {
@@ -2483,6 +2592,7 @@ mt76_connac_mcu_set_suspend_mode(struct mt76_dev *dev,
 				 bool enable, u8 mdtim,
 				 bool wow_suspend)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_set_suspend_mode (contains uni commands)\n");
 	struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
 	struct {
 		struct {
@@ -2514,6 +2624,7 @@ mt76_connac_mcu_set_wow_pattern(struct mt76_dev *dev,
 				u8 index, bool enable,
 				struct cfg80211_pkt_pattern *pattern)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_set_wow_pattern (contains uni commands)\n");
 	struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
 	struct mt76_connac_wow_pattern_tlv *ptlv;
 	struct sk_buff *skb;
@@ -2546,6 +2657,7 @@ int
 mt76_connac_mcu_set_wow_ctrl(struct mt76_phy *phy, struct ieee80211_vif *vif,
 			     bool suspend, struct cfg80211_wowlan *wowlan)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_set_wow_ctrl (contains uni commands)\n");
 	struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
 	struct mt76_dev *dev = phy->dev;
 	struct {
@@ -2598,6 +2710,7 @@ EXPORT_SYMBOL_GPL(mt76_connac_mcu_set_wow_ctrl);
 
 int mt76_connac_mcu_set_hif_suspend(struct mt76_dev *dev, bool suspend, bool wait_resp)
 {
+	printk(KERN_INFO "MT7902: Starting mt76_connac_mcu_set_hif_suspend (contains uni commands)\n");
 	struct {
 		struct {
 			u8 hif_type; /* 0x0: HIF_SDIO
@@ -3072,7 +3185,7 @@ static u32 mt76_connac2_get_data_mode(struct mt76_dev *dev, u32 info)
 {
 	u32 mode = DL_MODE_NEED_RSP;
 
-	if ((!is_mt7921(dev) && !is_mt7925(dev)) || info == PATCH_SEC_NOT_SUPPORT)
+	if ((!is_mt7921(dev) && !is_mt7925(dev) && !is_mt7902(dev)) || info == PATCH_SEC_NOT_SUPPORT)
 		return mode;
 
 	switch (FIELD_GET(PATCH_SEC_ENC_TYPE_MASK, info)) {
@@ -3256,6 +3369,47 @@ exit:
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mt76_connac2_mcu_fill_message);
+
+int mt76_mcu_add_dev_info(struct mt76_phy *phy, 
+			    struct ieee80211_bss_conf *bss_conf, 
+			    struct mt76_vif_link *mvif, bool enable)
+{
+	struct mt76_dev *dev = phy->dev;
+	struct {
+		struct req_hdr {
+			u8 omac_idx;
+			u8 band_idx;
+			__le16 tlv_num;
+			u8 is_tlv_append;
+			u8 rsv[3];
+		} __packed hdr;
+		struct req_tlv {
+			__le16 tag;
+			__le16 len;
+			u8 active;
+			u8 band_idx;
+			u8 omac_addr[ETH_ALEN];
+		} __packed tlv;
+	} data = {
+		.hdr = {
+			.omac_idx = mvif->omac_idx,
+			.band_idx = mvif->band_idx,
+			.tlv_num = cpu_to_le16(1),
+			.is_tlv_append = 1,
+		},
+		.tlv = {
+			.tag = cpu_to_le16(DEV_INFO_ACTIVE),
+			.len = cpu_to_le16(sizeof(struct req_tlv)),
+			.active = enable,
+			.band_idx = mvif->band_idx,
+		},
+	};
+
+	memcpy(data.tlv.omac_addr, bss_conf->addr, ETH_ALEN);
+	return mt76_mcu_send_msg(dev, MCU_EXT_CMD(DEV_INFO_UPDATE),
+				 &data, sizeof(data), true);
+}
+EXPORT_SYMBOL_GPL(mt76_mcu_add_dev_info);
 
 MODULE_AUTHOR("Lorenzo Bianconi <lorenzo@kernel.org>");
 MODULE_DESCRIPTION("MediaTek MT76x connac layer helpers");

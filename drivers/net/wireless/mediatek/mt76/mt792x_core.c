@@ -151,7 +151,8 @@ void mt792x_stop(struct ieee80211_hw *hw, bool suspend)
 	cancel_work_sync(&dev->reset_work);
 	mt76_connac_free_pending_tx_skbs(&dev->pm, NULL);
 
-	if (is_mt7921(&dev->mt76)) {
+	if (is_mt7921(&dev->mt76) && !is_mt7902(&dev->mt76)) {
+		printk("Please dontttttttttttt");
 		mt792x_mutex_acquire(dev);
 		mt76_connac_mcu_set_mac_enable(&dev->mt76, 0, false, false);
 		mt792x_mutex_release(dev);
@@ -173,8 +174,10 @@ void mt792x_mac_link_bss_remove(struct mt792x_dev *dev,
 	link_conf = mt792x_vif_to_bss_conf(vif, mconf->link_id);
 
 	mt76_connac_free_pending_tx_skbs(&dev->pm, &mlink->wcid);
-	mt76_connac_mcu_uni_add_dev(&dev->mphy, link_conf, &mconf->mt76,
-				    &mlink->wcid, false);
+//	mt76_connac_mcu_uni_add_dev(&dev->mphy, link_conf, &mconf->mt76,
+//				    &mlink->wcid, false);
+
+	mt76_mcu_add_dev_info(&dev->mphy, &vif->bss_conf, &mconf->mt76, true);
 
 	rcu_assign_pointer(dev->mt76.wcid[idx], NULL);
 
@@ -927,7 +930,7 @@ EXPORT_SYMBOL_GPL(mt792xe_mcu_fw_pmctrl);
 int mt792x_load_firmware(struct mt792x_dev *dev)
 {
 	int ret;
-
+	dev_info(dev->mt76.dev, "Loading firmware patch: %s\n", mt792x_patch_name(dev));
 	ret = mt76_connac2_load_patch(&dev->mt76, mt792x_patch_name(dev));
 	if (ret)
 		return ret;
@@ -938,7 +941,8 @@ int mt792x_load_firmware(struct mt792x_dev *dev)
 		if (!ret)
 			ret = __mt792x_mcu_drv_pmctrl(dev);
 	}
-
+	
+	dev_info(dev->mt76.dev, "Loading RAM patch: %s\n", mt792x_ram_name(dev));
 	ret = mt76_connac2_load_ram(&dev->mt76, mt792x_ram_name(dev), NULL);
 	if (ret)
 		return ret;
@@ -954,7 +958,7 @@ int mt792x_load_firmware(struct mt792x_dev *dev)
 	dev->mt76.hw->wiphy->wowlan = &mt76_connac_wowlan_support;
 #endif /* CONFIG_PM */
 
-	dev_dbg(dev->mt76.dev, "Firmware init done\n");
+	dev_info(dev->mt76.dev, "Firmware init done\n");
 
 	return 0;
 }

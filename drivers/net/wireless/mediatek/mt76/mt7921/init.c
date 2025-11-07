@@ -166,6 +166,18 @@ int mt7921_mac_init(struct mt792x_dev *dev)
 	mt76_set(dev, MT_MDP_DCR0, MT_MDP_DCR0_DAMSDU_EN);
 	/* enable hardware rx header translation */
 	mt76_set(dev, MT_MDP_DCR0, MT_MDP_DCR0_RX_HDR_TRANS_EN);
+	
+	u32 reg_val1 = mt76_rr(dev, 0x7C00E238);
+	printk(KERN_INFO "MT7902_DBG: Firmware loaded: Value at 0xFE238 (phys 0x7C00E238) before clear is 0x%08x\n", reg_val1);
+	mt76_rmw(dev, 0x7C00E238, BIT(0), 0);
+	u32 reg_val2 = mt76_rr(dev, 0x7C00E238);
+	printk(KERN_INFO "MT7902_DBG: Firmware loaded: Value at 0xFE238 (phys 0x7C00E238) after clear is 0x%08x\n", reg_val2);
+	
+	u32 reg_val3 = mt76_rr(dev, 0x70005054);
+	printk(KERN_INFO "MT7902_DBG: Firmware loaded: Value at 0x70005054 before is 0x%08x\n", reg_val3);
+	mt76_wr(dev, 0x70005054, (reg_val3 & 0xfffffff0));
+	u32 reg_val4 = mt76_rr(dev, 0x70005054);
+	printk(KERN_INFO "MT7902_DBG: Firmware loaded: Value at 0x70005054 after is 0x%08x\n", reg_val4);
 
 	for (i = 0; i < MT792x_WTBL_SIZE; i++)
 		mt7921_mac_wtbl_update(dev, i,
@@ -285,10 +297,10 @@ int mt7921_register_device(struct mt792x_dev *dev)
 	INIT_DELAYED_WORK(&dev->mphy.mac_work, mt792x_mac_work);
 	INIT_DELAYED_WORK(&dev->phy.scan_work, mt7921_scan_work);
 	INIT_DELAYED_WORK(&dev->coredump.work, mt7921_coredump_work);
-#if IS_ENABLED(CONFIG_IPV6)
-	INIT_WORK(&dev->ipv6_ns_work, mt7921_set_ipv6_ns_work);
-	skb_queue_head_init(&dev->ipv6_ns_list);
-#endif
+//#if IS_ENABLED(CONFIG_IPV6)
+//	INIT_WORK(&dev->ipv6_ns_work, mt7921_set_ipv6_ns_work);
+//	skb_queue_head_init(&dev->ipv6_ns_list);
+//#endif
 	skb_queue_head_init(&dev->phy.scan_event_list);
 	skb_queue_head_init(&dev->coredump.msg_list);
 

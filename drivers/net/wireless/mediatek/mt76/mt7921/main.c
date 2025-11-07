@@ -197,8 +197,11 @@ void mt7921_set_stream_he_caps(struct mt792x_phy *phy)
 	struct ieee80211_sband_iftype_data *data;
 	struct ieee80211_supported_band *band;
 	int n;
+	
+	printk(KERN_INFO "MT7902: Start mt7921_set_stream_he_caps\n");
 
 	if (phy->mt76->cap.has_2ghz) {
+		printk(KERN_INFO "MT7902: mt7921_set_stream_he_caps: 2g\n");
 		data = phy->iftype[NL80211_BAND_2GHZ];
 		n = mt7921_init_he_caps(phy, NL80211_BAND_2GHZ, data);
 
@@ -207,6 +210,7 @@ void mt7921_set_stream_he_caps(struct mt792x_phy *phy)
 	}
 
 	if (phy->mt76->cap.has_5ghz) {
+		printk(KERN_INFO "MT7902: mt7921_set_stream_he_caps: 5g\n");
 		data = phy->iftype[NL80211_BAND_5GHZ];
 		n = mt7921_init_he_caps(phy, NL80211_BAND_5GHZ, data);
 
@@ -214,6 +218,7 @@ void mt7921_set_stream_he_caps(struct mt792x_phy *phy)
 		_ieee80211_set_sband_iftype_data(band, data, n);
 
 		if (phy->mt76->cap.has_6ghz) {
+			printk(KERN_INFO "MT7902: mt7921_set_stream_he_caps: 6g\n");
 			data = phy->iftype[NL80211_BAND_6GHZ];
 			n = mt7921_init_he_caps(phy, NL80211_BAND_6GHZ, data);
 
@@ -227,42 +232,78 @@ int __mt7921_start(struct mt792x_phy *phy)
 {
 	struct mt76_phy *mphy = phy->mt76;
 	int err;
+	bool gen4m = 0;
+	bool temp = 0;
+	
+	if (is_mt7902(mphy->dev) && gen4m && temp) {
+		printk(KERN_INFO "MT7902: Should go here (gen4m flow)\n");
+		
+		//Set Domain Info (0x0f)
+		err = mt76_connac_mcu_set_channel_domain(mphy);
+		if (err)
+			return err;
+		
+	} else if (is_mt7902(mphy->dev) && !gen4m && temp) {
+		//Temp working MT7902 shifted here
+		printk(KERN_INFO "MT7902: Should go here (mt76 flow)\n");
+		printk(KERN_INFO "MT7902: Pinging firmware...\n");
+		
+		err = mt76_connac_mcu_chip_config(mphy->dev);
+		if (err)
+			return err;
+			
+		if (!test_bit(MT76_STATE_RUNNING, &mphy->state)) {
+			printk(KERN_INFO "MT7902: Set MAC enable\n");
+			err = mt76_connac_mcu_set_mac_enable(mphy->dev, 0, true, false);
+			if (err)
+				return err;
+		} else {
+			printk(KERN_INFO "MT7902: Don't set MAC enable\n");
+		}
+			
+		err = mt76_connac_mcu_set_channel_domain(mphy);
+		if (err)
+			return err;
+			
+		printk(KERN_INFO "MT7902: Passing Set channel domain\n");
+		
+		err = mt7921_mcu_set_chan_info(phy, MCU_EXT_CMD(SET_RX_PATH));
+		if (err)
+			return err;
+			
+		printk(KERN_INFO "MT7902: Passing Set channel info\n");
+			
+		err = mt7921_set_tx_sar_pwr(mphy->hw, NULL);
+		if (err)
+			return err;
+			
+		printk(KERN_INFO "MT7902: Passing TX PWR\n");
+			
+	} else {
+		printk(KERN_INFO "MT7902: Should not go here (mt76 - MT7921 flow)\n");
+		
+		err = mt76_connac_mcu_set_mac_enable(mphy->dev, 0, true, false);
+		if (err)
+			return err;
 
-	err = mt76_connac_mcu_set_mac_enable(mphy->dev, 0, true, false);
-	if (err)
-		return err;
+		err = mt76_connac_mcu_set_channel_domain(mphy);
+		if (err)
+			return err;
+		
+		err = mt7921_set_tx_sar_pwr(mphy->hw, NULL);
+		if (err)
+			return err;
 
-	err = mt76_connac_mcu_set_channel_domain(mphy);
-	if (err)
-		return err;
-
-	err = mt7921_mcu_set_chan_info(phy, MCU_EXT_CMD(SET_RX_PATH));
-	if (err)
-		return err;
-
-	err = mt7921_set_tx_sar_pwr(mphy->hw, NULL);
-	if (err)
-		return err;
-
+		err = mt7921_mcu_set_chan_info(phy, MCU_EXT_CMD(SET_RX_PATH));
+		if (err)
+			return err;
+	}
+	
 	mt792x_mac_reset_counters(phy);
 	set_bit(MT76_STATE_RUNNING, &mphy->state);
-
 	ieee80211_queue_delayed_work(mphy->hw, &mphy->mac_work,
 				     MT792x_WATCHDOG_TIME);
-	if (mt76_is_mmio(mphy->dev)) {
-		err = mt7921_mcu_radio_led_ctrl(phy->dev, EXT_CMD_RADIO_LED_CTRL_ENABLE);
-		if (err)
-			return err;
-
-		err = mt7921_mcu_radio_led_ctrl(phy->dev, EXT_CMD_RADIO_ON_LED);
-		if (err)
-			return err;
-	}
-
-	if (phy->chip_cap & MT792x_CHIP_CAP_WF_RF_PIN_CTRL_EVT_EN) {
-		mt7921_mcu_wf_rf_pin_ctrl(phy, WF_RF_PIN_INIT);
-		wiphy_rfkill_start_polling(mphy->hw->wiphy);
-	}
+	printk(KERN_INFO "MT7902: __mt7921_start finished\n");
 
 	return 0;
 }
@@ -304,6 +345,8 @@ mt7921_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	struct mt792x_phy *phy = mt792x_hw_phy(hw);
 	struct mt76_txq *mtxq;
 	int idx, ret = 0;
+	
+	printk(KERN_INFO "MT7902: Starting mt7921_add_interface\n");
 
 	mt792x_mutex_acquire(dev);
 
@@ -318,10 +361,25 @@ mt7921_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	mvif->bss_conf.vif = mvif;
 	mvif->bss_conf.mt76.band_idx = 0;
 	mvif->bss_conf.mt76.wmm_idx = mvif->bss_conf.mt76.idx % MT76_CONNAC_MAX_WMM_SETS;
-
+	
+	printk(KERN_INFO "MT7902_DBG: Calling mt7902_mcu_add_dev_info with params:\n");
+	printk(KERN_INFO "  phy: %ps\n", phy);
+	printk(KERN_INFO "  vif->addr (for bss_conf): %pM\n", vif->addr);
+	printk(KERN_INFO "  mvif->idx (bss_idx): %d\n", mvif->bss_conf.mt76.idx);
+	printk(KERN_INFO "  mvif->omac_idx: %d\n", mvif->bss_conf.mt76.omac_idx);
+	printk(KERN_INFO "  mvif->band_idx: %d\n", mvif->bss_conf.mt76.band_idx);
+	printk(KERN_INFO "  mvif->wmm_idx: %d\n", mvif->bss_conf.mt76.wmm_idx);
+	printk(KERN_INFO "  wcid pointer: %ps\n", &mvif->sta.deflink.wcid);
+	printk(KERN_INFO "  enable: true\n");
+/*
 	ret = mt76_connac_mcu_uni_add_dev(&dev->mphy, &vif->bss_conf,
 					  &mvif->bss_conf.mt76,
 					  &mvif->sta.deflink.wcid, true);
+	if (ret)
+		goto out;
+*/
+	ret = mt7902_mcu_add_dev_info(&dev->mphy, &vif->bss_conf, &mvif->bss_conf.mt76, true);
+//	ret = mt7902_mcu_add_dev_gen4m(&dev->mphy, vif, &mvif->sta.deflink.wcid, true);
 	if (ret)
 		goto out;
 
@@ -476,10 +534,22 @@ int mt7921_set_channel(struct mt76_phy *mphy)
 	int ret;
 
 	mt76_connac_pm_wake(mphy, &dev->pm);
+	
+	ret = mt76_connac_mcu_set_channel_domain(mphy);
+	if (ret)
+		return ret;
+	
+/*	
+	ret = mt7921_mcu_set_chan_info(phy, MCU_EXT_CMD(SET_RX_PATH));
+	if (ret)
+		goto out;
 	ret = mt7921_mcu_set_chan_info(phy, MCU_EXT_CMD(CHANNEL_SWITCH));
 	if (ret)
 		goto out;
-
+	ret = mt7921_set_tx_sar_pwr(mphy->hw, NULL);
+	if (ret)
+		return ret;
+*/
 	mt792x_mac_set_timeing(phy);
 	mt792x_mac_reset_counters(phy);
 	phy->noise = 0;
@@ -498,6 +568,8 @@ static int mt7921_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 			  struct ieee80211_vif *vif, struct ieee80211_sta *sta,
 			  struct ieee80211_key_conf *key)
 {
+	printk(KERN_INFO "MT7902: mt7921_set_key (contains uni commands)\n");
+
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 	struct mt792x_sta *msta = sta ? (struct mt792x_sta *)sta->drv_priv :
@@ -556,7 +628,7 @@ static int mt7921_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 
 	mt76_wcid_key_setup(&dev->mt76, wcid, key);
 	err = mt76_connac_mcu_add_key(&dev->mt76, vif, &msta->deflink.bip,
-				      key, MCU_UNI_CMD(STA_REC_UPDATE),
+				      key, MCU_EXT_CMD(STA_REC_UPDATE),
 				      &msta->deflink.wcid, cmd);
 	if (err)
 		goto out;
@@ -565,7 +637,7 @@ static int mt7921_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	    key->cipher == WLAN_CIPHER_SUITE_WEP40)
 		err = mt76_connac_mcu_add_key(&dev->mt76, vif,
 					      &mvif->wep_sta->deflink.bip,
-					      key, MCU_UNI_CMD(STA_REC_UPDATE),
+					      key, MCU_EXT_CMD(STA_REC_UPDATE),
 					      &mvif->wep_sta->deflink.wcid, cmd);
 out:
 	mt792x_mutex_release(dev);
@@ -576,6 +648,7 @@ out:
 static void
 mt7921_pm_interface_iter(void *priv, u8 *mac, struct ieee80211_vif *vif)
 {
+	printk(KERN_INFO "MT7902: mt7921_pm_interface_iter (contains mt7921_mcu_set_beacon_filter)\n");
 	struct mt792x_dev *dev = priv;
 	struct ieee80211_hw *hw = mt76_hw(dev);
 	bool pm_enable = dev->pm.enable;
@@ -597,6 +670,7 @@ mt7921_pm_interface_iter(void *priv, u8 *mac, struct ieee80211_vif *vif)
 static void
 mt7921_sniffer_interface_iter(void *priv, u8 *mac, struct ieee80211_vif *vif)
 {
+	printk(KERN_INFO "MT7902: mt7921_pm_interface_iter (contains mt7921_sniffer_interface_iter)\n");
 	struct mt792x_dev *dev = priv;
 	struct ieee80211_hw *hw = mt76_hw(dev);
 	struct mt76_connac_pm *pm = &dev->pm;
@@ -663,6 +737,8 @@ static void mt7921_configure_filter(struct ieee80211_hw *hw,
 				    unsigned int *total_flags,
 				    u64 multicast)
 {
+	printk(KERN_INFO "MT7902: mt7921_configure_filter (contains mt7921_mcu_set_rxfilter)\n");
+
 #define MT7921_FILTER_FCSFAIL    BIT(2)
 #define MT7921_FILTER_CONTROL    BIT(5)
 #define MT7921_FILTER_OTHER_BSS  BIT(6)
@@ -692,6 +768,7 @@ static void mt7921_bss_info_changed(struct ieee80211_hw *hw,
 				    struct ieee80211_bss_conf *info,
 				    u64 changed)
 {
+	printk(KERN_INFO "MT7902: mt7921_bss_info_changed (contains uni commands)\n");
 	struct mt792x_phy *phy = mt792x_hw_phy(hw);
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 
@@ -699,39 +776,52 @@ static void mt7921_bss_info_changed(struct ieee80211_hw *hw,
 
 	if (changed & BSS_CHANGED_ERP_SLOT) {
 		int slottime = info->use_short_slot ? 9 : 20;
+		printk(KERN_INFO "MT7902: mt7921_bss_info_changed (contains uni commands): BSS_CHANGED_ERP_SLOT\n");
 
 		if (slottime != phy->slottime) {
+			printk(KERN_INFO "MT7902: mt7921_bss_info_changed (contains uni commands): BSS_CHANGED_ERP_SLOT: slottime\n");
 			phy->slottime = slottime;
 			mt792x_mac_set_timeing(phy);
 		}
 	}
 
 	if (changed & (BSS_CHANGED_BEACON |
-		       BSS_CHANGED_BEACON_ENABLED))
-		mt7921_mcu_uni_add_beacon_offload(dev, hw, vif,
-						  info->enable_beacon);
+		       BSS_CHANGED_BEACON_ENABLED)) {
+		printk(KERN_INFO "MT7902: mt7921_bss_info_changed (contains uni commands): BSS_CHANGED_BEACON\n");
+//		mt7921_mcu_uni_add_beacon_offload(dev, hw, vif,
+//						  info->enable_beacon);
+	}
 
 	/* ensure that enable txcmd_mode after bss_info */
-	if (changed & (BSS_CHANGED_QOS | BSS_CHANGED_BEACON_ENABLED))
+	if (changed & (BSS_CHANGED_QOS | BSS_CHANGED_BEACON_ENABLED)) {
+		printk(KERN_INFO "MT7902: mt7921_bss_info_changed (contains uni commands): BSS_CHANGED_QOS\n");
 		mt7921_mcu_set_tx(dev, vif);
-
-	if (changed & BSS_CHANGED_PS)
-		mt7921_mcu_uni_bss_ps(dev, vif);
-
-	if (changed & BSS_CHANGED_CQM)
+	}
+	
+	if (changed & BSS_CHANGED_PS) {
+		printk(KERN_INFO "MT7902: mt7921_bss_info_changed (contains uni commands): BSS_CHANGED_PS\n");
+//		mt76_connac_mcu_set_vif_ps(dev, vif);
+//		mt7921_mcu_uni_bss_ps(dev, vif);
+	}
+	
+	if (changed & BSS_CHANGED_CQM) {
+		printk(KERN_INFO "MT7902: mt7921_bss_info_changed (contains uni commands): BSS_CHANGED_CQM\n");
 		mt7921_mcu_set_rssimonitor(dev, vif);
-
+	}
+	
 	if (changed & BSS_CHANGED_ASSOC) {
+		printk(KERN_INFO "MT7902: mt7921_bss_info_changed (contains uni commands): BSS_CHANGED_ASSOC\n");
 		mt7921_mcu_sta_update(dev, NULL, vif, true,
 				      MT76_STA_INFO_STATE_ASSOC);
 		mt7921_mcu_set_beacon_filter(dev, vif, vif->cfg.assoc);
 	}
 
 	if (changed & BSS_CHANGED_ARP_FILTER) {
-		struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
+		printk(KERN_INFO "MT7902: mt7921_bss_info_changed (contains uni commands): BSS_CHANGED_ARP_FILTER\n");
+//		struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 
-		mt76_connac_mcu_update_arp_filter(&dev->mt76, &mvif->bss_conf.mt76,
-						  info);
+//		mt76_connac_mcu_update_arp_filter(&dev->mt76, &mvif->bss_conf.mt76,
+//						  info);
 	}
 
 	mt792x_mutex_release(dev);
@@ -846,6 +936,8 @@ EXPORT_SYMBOL_GPL(mt7921_mac_sta_add);
 int mt7921_mac_sta_event(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 			 struct ieee80211_sta *sta, enum mt76_sta_event ev)
 {
+	printk(KERN_INFO "MT7902: mt7921_mac_sta_event (contains uni commands)\n");
+
 	struct mt792x_dev *dev = container_of(mdev, struct mt792x_dev, mt76);
 	struct mt792x_sta *msta = (struct mt792x_sta *)sta->drv_priv;
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
@@ -855,9 +947,12 @@ int mt7921_mac_sta_event(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 
 	mt792x_mutex_acquire(dev);
 
-	if (vif->type == NL80211_IFTYPE_STATION && !sta->tdls)
-		mt76_connac_mcu_uni_add_bss(&dev->mphy, vif, &mvif->sta.deflink.wcid,
-					    true, mvif->bss_conf.mt76.ctx);
+	if (vif->type == NL80211_IFTYPE_STATION && !sta->tdls) {
+//		mt76_connac_mcu_uni_add_bss(&dev->mphy, vif, &mvif->sta.deflink.wcid,
+//					    true, mvif->bss_conf.mt76.ctx);
+		u32 ret = mt7902_mcu_add_bss_info(mvif->phy, vif, true);
+		printk(KERN_INFO "MT7902: mac_sta_event: add bss info ret = %d\n", ret);
+	}
 
 	ewma_avg_signal_init(&msta->deflink.avg_ack_signal);
 
@@ -876,6 +971,7 @@ EXPORT_SYMBOL_GPL(mt7921_mac_sta_event);
 void mt7921_mac_sta_remove(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 			   struct ieee80211_sta *sta)
 {
+	printk(KERN_INFO "MT7902: mt7921_mac_sta_remove (contains uni commands)\n");
 	struct mt792x_dev *dev = container_of(mdev, struct mt792x_dev, mt76);
 	struct mt792x_sta *msta = (struct mt792x_sta *)sta->drv_priv;
 
@@ -892,10 +988,13 @@ void mt7921_mac_sta_remove(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 
 		mvif->wep_sta = NULL;
 		ewma_rssi_init(&mvif->bss_conf.rssi);
-		if (!sta->tdls)
-			mt76_connac_mcu_uni_add_bss(&dev->mphy, vif,
-						    &mvif->sta.deflink.wcid, false,
-						    mvif->bss_conf.mt76.ctx);
+		if (!sta->tdls) {
+			//mt76_connac_mcu_uni_add_bss(&dev->mphy, vif,
+			//			    &mvif->sta.deflink.wcid, false,
+			//			    mvif->bss_conf.mt76.ctx);
+			u32 ret = mt7902_mcu_add_bss_info(mvif->phy, vif, true);
+			printk(KERN_INFO "mac_sta_remove: add bss info ret = %d\n", ret);
+		}
 	}
 
 	spin_lock_bh(&dev->mt76.sta_poll_lock);
@@ -913,8 +1012,10 @@ static int mt7921_set_rts_threshold(struct ieee80211_hw *hw, int radio_idx,
 				    u32 val)
 {
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
-
-	mt792x_mutex_acquire(dev);
+	struct mt792x_phy *phy;
+	
+	printk("MT7902: mt7921_set_rts_threshold");
+	
 	mt76_connac_mcu_set_rts_thresh(&dev->mt76, val, 0);
 	mt792x_mutex_release(dev);
 
@@ -925,6 +1026,8 @@ static int
 mt7921_ampdu_action(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		    struct ieee80211_ampdu_params *params)
 {
+	printk(KERN_INFO "MT7902: mt7921_ampdu_action (contains uni commands)\n");
+
 	enum ieee80211_ampdu_mlme_action action = params->action;
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 	struct ieee80211_sta *sta = params->sta;
@@ -1181,6 +1284,8 @@ static void mt7921_sta_set_decap_offload(struct ieee80211_hw *hw,
 					 struct ieee80211_sta *sta,
 					 bool enabled)
 {
+	printk(KERN_INFO "MT7902: mt7921_sta_set_decap_offload (contains uni commands)\n");
+
 	struct mt792x_sta *msta = (struct mt792x_sta *)sta->drv_priv;
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 
@@ -1195,7 +1300,7 @@ static void mt7921_sta_set_decap_offload(struct ieee80211_hw *hw,
 		clear_bit(MT_WCID_FLAG_HDR_TRANS, &msta->deflink.wcid.flags);
 
 	mt76_connac_mcu_sta_update_hdr_trans(&dev->mt76, vif, &msta->deflink.wcid,
-					     MCU_UNI_CMD(STA_REC_UPDATE));
+					     MCU_EXT_CMD(STA_REC_UPDATE));
 
 	mt792x_mutex_release(dev);
 }
@@ -1205,6 +1310,8 @@ static void mt7921_ipv6_addr_change(struct ieee80211_hw *hw,
 				    struct ieee80211_vif *vif,
 				    struct inet6_dev *idev)
 {
+	printk(KERN_INFO "MT7902: mt7921_ipv6_addr_change (contains uni commands)\n");
+
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 	struct inet6_ifaddr *ifa;
@@ -1300,26 +1407,32 @@ mt7921_channel_switch_beacon(struct ieee80211_hw *hw,
 			     struct ieee80211_vif *vif,
 			     struct cfg80211_chan_def *chandef)
 {
+	printk(KERN_INFO "MT7902: mt7921_channel_switch_beacon (contains uni commands)\n");
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
-
+/*
 	mt792x_mutex_acquire(dev);
 	mt7921_mcu_uni_add_beacon_offload(dev, hw, vif, true);
 	mt792x_mutex_release(dev);
+*/
 }
 
 static int
 mt7921_start_ap(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		struct ieee80211_bss_conf *link_conf)
 {
+	printk(KERN_INFO "MT7902: mt7921_start_ap (contains uni commands)\n");
+
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
-	struct mt792x_phy *phy = mt792x_hw_phy(hw);
+//	struct mt792x_phy *phy = mt792x_hw_phy(hw);
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 	int err;
 
 	mt792x_mutex_acquire(dev);
 
-	err = mt76_connac_mcu_uni_add_bss(phy->mt76, vif, &mvif->sta.deflink.wcid,
-					  true, mvif->bss_conf.mt76.ctx);
+//	err = mt76_connac_mcu_uni_add_bss(phy->mt76, vif, &mvif->sta.deflink.wcid,
+//					  true, mvif->bss_conf.mt76.ctx);
+	err = mt7902_mcu_add_bss_info(mvif->phy, vif, true);
+	printk(KERN_INFO "MT7902: start_ap: add bss info, ret = %d\n", err);
 	if (err)
 		goto out;
 
@@ -1339,8 +1452,10 @@ static void
 mt7921_stop_ap(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	       struct ieee80211_bss_conf *link_conf)
 {
+	printk(KERN_INFO "MT7902: mt7921_stop_ap (contains uni commands)\n");
+
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
-	struct mt792x_phy *phy = mt792x_hw_phy(hw);
+//	struct mt792x_phy *phy = mt792x_hw_phy(hw);
 	struct mt792x_dev *dev = mt792x_hw_dev(hw);
 	int err;
 
@@ -1350,8 +1465,9 @@ mt7921_stop_ap(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	if (err)
 		goto out;
 
-	mt76_connac_mcu_uni_add_bss(phy->mt76, vif, &mvif->sta.deflink.wcid, false,
-				    mvif->bss_conf.mt76.ctx);
+//	mt76_connac_mcu_uni_add_bss(phy->mt76, vif, &mvif->sta.deflink.wcid, false,
+//				    mvif->bss_conf.mt76.ctx);
+	mt7902_mcu_add_bss_info(mvif->phy, vif, false);
 
 out:
 	mt792x_mutex_release(dev);
@@ -1382,6 +1498,8 @@ mt7921_change_chanctx(struct ieee80211_hw *hw,
 		      struct ieee80211_chanctx_conf *ctx,
 		      u32 changed)
 {
+	printk(KERN_INFO "MT7902: mt7921_change_chanctx (contains uni commands)\n");
+
 	struct mt792x_chanctx *mctx = (struct mt792x_chanctx *)ctx->drv_priv;
 	struct mt792x_phy *phy = mt792x_hw_phy(hw);
 	struct ieee80211_vif *vif;
@@ -1396,8 +1514,8 @@ mt7921_change_chanctx(struct ieee80211_hw *hw,
 	mt792x_mutex_acquire(phy->dev);
 	if (vif->type == NL80211_IFTYPE_MONITOR)
 		mt7921_mcu_config_sniffer(mvif, ctx);
-	else
-		mt76_connac_mcu_uni_set_chctx(mvif->phy->mt76, &mvif->bss_conf.mt76, ctx);
+//	else
+//		mt76_connac_mcu_uni_set_chctx(mvif->phy->mt76, &mvif->bss_conf.mt76, ctx);
 	mt792x_mutex_release(phy->dev);
 }
 
@@ -1436,10 +1554,12 @@ static int mt7921_switch_vif_chanctx(struct ieee80211_hw *hw,
 
 void mt7921_csa_work(struct work_struct *work)
 {
+	printk(KERN_INFO "MT7902: mt7921_csa_work (contains uni commands)\n");
+
 	struct mt792x_vif *mvif;
 	struct mt792x_dev *dev;
 	struct ieee80211_vif *vif;
-	int ret;
+	int ret = 0;
 
 	mvif = (struct mt792x_vif *)container_of(work, struct mt792x_vif,
 						csa_work);
@@ -1447,8 +1567,8 @@ void mt7921_csa_work(struct work_struct *work)
 	vif = container_of((void *)mvif, struct ieee80211_vif, drv_priv);
 
 	mt792x_mutex_acquire(dev);
-	ret = mt76_connac_mcu_uni_set_chctx(mvif->phy->mt76, &mvif->bss_conf.mt76,
-					    dev->new_ctx);
+//	ret = mt76_connac_mcu_uni_set_chctx(mvif->phy->mt76, &mvif->bss_conf.mt76,
+//					    dev->new_ctx);
 	mt792x_mutex_release(dev);
 
 	ieee80211_chswitch_done(vif, !ret, 0);
@@ -1533,9 +1653,9 @@ const struct ieee80211_ops mt7921_ops = {
 	.sta_pre_rcu_remove = mt76_sta_pre_rcu_remove,
 	.set_key = mt7921_set_key,
 	.sta_set_decap_offload = mt7921_sta_set_decap_offload,
-#if IS_ENABLED(CONFIG_IPV6)
-	.ipv6_addr_change = mt7921_ipv6_addr_change,
-#endif /* CONFIG_IPV6 */
+//#if IS_ENABLED(CONFIG_IPV6)
+//	.ipv6_addr_change = mt7921_ipv6_addr_change,
+//#endif /* CONFIG_IPV6 */
 	.ampdu_action = mt7921_ampdu_action,
 	.set_rts_threshold = mt7921_set_rts_threshold,
 	.wake_tx_queue = mt76_wake_tx_queue,
