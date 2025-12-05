@@ -1225,7 +1225,7 @@ enum {
 	MCU_EXT_CMD_STA_REC_UPDATE = 0x25,
 	MCU_EXT_CMD_BSS_INFO_UPDATE = 0x26,
 	MCU_EXT_CMD_EDCA_UPDATE = 0x27,
-	MCU_EXT_CMD_DEV_INFO_UPDATE = 0x2A,
+	MCU_EXT_CMD_DEV_INFO_UPDATE = 0x2a,
 	MCU_EXT_CMD_THERMAL_CTRL = 0x2c,
 	MCU_EXT_CMD_WTBL_UPDATE = 0x32,
 	MCU_EXT_CMD_SET_DRR_CTRL = 0x36,
@@ -1326,9 +1326,14 @@ enum {
 
 /* offload mcu commands */
 enum {
+	MCU_CE_CMD_DUMMY_RSV = 0x00,	
 	MCU_CE_CMD_TEST_CTRL = 0x01,
+	MCU_CE_CMD_BASIC_CONFIG = 0x02,
 	MCU_CE_CMD_START_HW_SCAN = 0x03,
 	MCU_CE_CMD_SET_PS_PROFILE = 0x05,
+	MCU_CE_CMD_BSS_ACTIVATE_CTRL = 0x11,
+	MCU_CE_CMD_SET_BSS_INFO = 0x12,
+	MCU_CE_CMD_STA_REC_UPDATE = 0x13,
 	MCU_CE_CMD_SET_RX_FILTER = 0x0a,
 	MCU_CE_CMD_SET_CHAN_DOMAIN = 0x0f,
 	MCU_CE_CMD_SET_BSS_CONNECTED = 0x16,
@@ -1337,6 +1342,7 @@ enum {
 	MCU_CE_CMD_SET_ROC = 0x1c,
 	MCU_CE_CMD_SET_EDCA_PARMS = 0x1d,
 	MCU_CE_CMD_SET_P2P_OPPPS = 0x33,
+	MCU_CE_CMD_ID_RRM = 0x5a,
 	MCU_CE_CMD_SET_CLC = 0x5c,
 	MCU_CE_CMD_SET_RATE_TX_POWER = 0x5d,
 	MCU_CE_CMD_SCHED_SCAN_ENABLE = 0x61,
@@ -1569,6 +1575,44 @@ struct mt76_connac_hw_scan_req {
 	u8 ssid_type_ext;
 } __packed;
 
+#define MT7902_SCAN_OOB_MAX_NUM 16
+#define MT7902_SCAN_IE_LEN      600
+
+struct mt7902_scan_req_v2 {
+    u8 seq_num;
+    u8 bss_idx;
+    u8 scan_type;
+    u8 ssid_type;
+    u8 ssids_num;
+    u8 probe_req_num;
+    u8 scan_func;
+    u8 version;
+    struct mt76_connac_mcu_scan_ssid ssids[4];
+    __le16 probe_delay_time;
+    __le16 channel_dwell_time;
+    __le16 timeout_value;
+    u8 channel_type;
+    u8 channels_num;
+    struct mt76_connac_mcu_scan_channel channels[32];
+    __le16 ies_len;
+    u8 ies[MT7902_SCAN_IE_LEN];
+    u8 ext_channels_num;
+    u8 ext_ssids_num;
+    __le16 channel_min_dwell_time;
+    struct mt76_connac_mcu_scan_channel ext_channels[32];
+    struct mt76_connac_mcu_scan_ssid ext_ssids[6];
+    u8 bssid[ETH_ALEN];
+    u8 random_mac[ETH_ALEN];
+    
+    /* --- Fields missing in original mt76 struct --- */
+    u8 ext_bssid[MT7902_SCAN_OOB_MAX_NUM][ETH_ALEN];
+    u8 short_ssid_num;
+    u8 bssid_match_ch[MT7902_SCAN_OOB_MAX_NUM];
+    u8 bssid_match_ssid_ind[MT7902_SCAN_OOB_MAX_NUM];
+    u8 padding_1[3];
+    __le32 scn_func_mask_extend;
+    u8 padding_3[24];
+} __packed;
 #define MT76_CONNAC_SCAN_DONE_EVENT_MAX_CHANNEL_NUM		64
 
 struct mt76_connac_hw_scan_done {
@@ -1823,6 +1867,22 @@ struct mt76_connac_mcu_reg_event {
 	__le32 val;
 } __packed;
 
+struct mt7902_bss_activate_ctrl {
+	u8  ucBssIndex;
+	u8  ucActive;
+	u8  ucNetworkType;
+	u8  ucOwnMacAddrIndex;
+	u8  aucBssMacAddr[6];
+	u8  ucBMCWlanIndex;
+	u8  ucReserved; /* Padding to 12 bytes */
+} __packed;
+
+struct CMD_POWER_SAVE_MODE {
+	uint8_t  ucBssIndex;
+	uint8_t  ucPowerMode;
+	uint8_t  aucReserved[2];
+};
+
 static inline enum mcu_cipher_type
 mt76_connac_mcu_get_cipher(int cipher)
 {
@@ -1863,7 +1923,7 @@ mt76_connac_mcu_gen_dl_mode(struct mt76_dev *dev, u8 feature_set, bool is_wa)
 
 	ret |= feature_set & FW_FEATURE_SET_ENCRYPT ?
 	       DL_MODE_ENCRYPT | DL_MODE_RESET_SEC_IV : 0;
-	if (is_mt7921(dev) || is_mt7925(dev))
+	if (is_mt7921(dev) || is_mt7925(dev) || is_mt7902(dev))
 		ret |= feature_set & FW_FEATURE_ENCRY_MODE ?
 		       DL_CONFIG_ENCRY_MODE_SEL : 0;
 	ret |= FIELD_PREP(DL_MODE_KEY_IDX,
@@ -2065,4 +2125,7 @@ int mt76_connac2_load_ram(struct mt76_dev *dev, const char *fw_wm,
 int mt76_connac2_load_patch(struct mt76_dev *dev, const char *fw_name);
 int mt76_connac2_mcu_fill_message(struct mt76_dev *mdev, struct sk_buff *skb,
 				  int cmd, int *wait_seq);
+int mt76_mcu_add_dev_info(struct mt76_phy *phy, 
+			    struct ieee80211_bss_conf *bss_conf, 
+			    struct mt76_vif_link *mvif, bool enable);
 #endif /* __MT76_CONNAC_MCU_H */

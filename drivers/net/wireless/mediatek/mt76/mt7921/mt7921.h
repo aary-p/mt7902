@@ -15,6 +15,13 @@
 #define MT7921_RX_MCU_RING_SIZE		8
 #define MT7921_RX_MCU_WA_RING_SIZE	512
 
+#define MT7902_TX_RING_SIZE		2048
+#define MT7902_TX_MCU_RING_SIZE		256
+#define MT7902_TX_FWDL_RING_SIZE	128
+
+#define MT7902_RX_RING_SIZE		1536
+#define MT7902_RX_MCU_RING_SIZE		512
+
 #define MT7921_EEPROM_SIZE		3584
 #define MT7921_TOKEN_SIZE		8192
 
@@ -108,13 +115,24 @@ enum mt7921_txq_id {
 	MT7921_TXQ_BAND0,
 	MT7921_TXQ_BAND1,
 	MT7921_TXQ_FWDL = 16,
-	MT7921_TXQ_MCU_WM,
+	MT7921_TXQ_MCU_WM = 15,
 };
 
 enum mt7921_rxq_id {
 	MT7921_RXQ_BAND0 = 0,
 	MT7921_RXQ_BAND1,
 	MT7921_RXQ_MCU_WM = 0,
+};
+
+enum mt7902_txq_id {
+	MT7902_TXQ_BAND0 = 0,
+	MT7902_TXQ_MCU_WM = 15,
+	MT7902_TXQ_FWDL = 16,
+};
+
+enum mt7902_rxq_id {
+	MT7902_RXQ_MCU_WM = 0,
+	MT7902_RXQ_BAND0 = 0,
 };
 
 enum {
@@ -188,6 +206,8 @@ u32 mt7921_reg_map(struct mt792x_dev *dev, u32 addr);
 int __mt7921_start(struct mt792x_phy *phy);
 int mt7921_register_device(struct mt792x_dev *dev);
 void mt7921_unregister_device(struct mt792x_dev *dev);
+int mt7902_firmware_state(struct mt792x_dev *dev, bool wa);
+int mt7902_load_firmware(struct mt792x_dev *dev);
 int mt7921_run_firmware(struct mt792x_dev *dev);
 int mt7921_set_channel(struct mt76_phy *mphy);
 int mt7921_mcu_set_bss_pm(struct mt792x_dev *dev, struct ieee80211_vif *vif,
@@ -335,4 +355,22 @@ int mt7921_mcu_abort_roc(struct mt792x_phy *phy, struct mt792x_vif *vif,
 			 u8 token_id);
 void mt7921_roc_abort_sync(struct mt792x_dev *dev);
 int mt7921_mcu_set_rssimonitor(struct mt792x_dev *dev, struct ieee80211_vif *vif);
+int mt7902_mcu_add_dev_info(struct mt76_phy *phy, 
+			    struct ieee80211_bss_conf *bss_conf, 
+			    struct mt76_vif_link *mvif, bool enable);
+int mt7902_mcu_add_dev_gen4m(struct mt76_phy *phy, struct ieee80211_vif *vif,
+			 struct mt76_wcid *wcid, bool enable);
+int mt7902_mcu_add_bss_info(struct mt792x_phy *phy,
+			    struct ieee80211_vif *vif, int enable);
+int mt7902_mcu_send_dummy(struct mt792x_dev *dev);
+int mt7902_mcu_sync_time(struct mt792x_dev *dev, u32 u4Sec, u32 u4Usec);
+int mt7902_mcu_set_rrm(struct mt792x_dev *dev, u8 bss_idx);
+int mt7902_mcu_set_ps_profile(struct mt792x_dev *dev, u8 bss_idx,
+                             u8 pwr_mode, bool wait_resp);
+void mt7902_dump_all_regs(struct mt792x_dev *dev);
+int mt7902_mcu_sta_update_gen4m(struct mt792x_dev *dev, struct ieee80211_sta *sta,
+                                struct ieee80211_vif *vif, bool enable,
+                                enum mt76_sta_info_state state);
+int mt7902_mcu_add_bss_info_gen4m(struct mt792x_phy *phy,
+                  struct ieee80211_vif *vif, int enable);
 #endif

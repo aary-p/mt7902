@@ -118,10 +118,10 @@ void mt7921_regd_update(struct mt792x_dev *dev)
 	struct ieee80211_hw *hw = mdev->hw;
 	struct wiphy *wiphy = hw->wiphy;
 
-	mt7921_mcu_set_clc(dev, mdev->alpha2, dev->country_ie_env);
-	mt7921_regd_channel_update(wiphy, dev);
-	mt76_connac_mcu_set_channel_domain(hw->priv);
-	mt7921_set_tx_sar_pwr(hw, NULL);
+//	mt7921_mcu_set_clc(dev, mdev->alpha2, dev->country_ie_env);
+//	mt7921_regd_channel_update(wiphy, dev);
+//	mt76_connac_mcu_set_channel_domain(hw->priv);
+//	mt7921_set_tx_sar_pwr(hw, NULL);
 }
 EXPORT_SYMBOL_GPL(mt7921_regd_update);
 
@@ -166,26 +166,55 @@ int mt7921_mac_init(struct mt792x_dev *dev)
 	mt76_set(dev, MT_MDP_DCR0, MT_MDP_DCR0_DAMSDU_EN);
 	/* enable hardware rx header translation */
 	mt76_set(dev, MT_MDP_DCR0, MT_MDP_DCR0_RX_HDR_TRANS_EN);
+	
+	u32 reg_val1 = mt76_rr(dev, 0x7C00E238);
+	printk(KERN_INFO "MT7902_DBG: Firmware loaded: Value at 0xFE238 (phys 0x7C00E238) before clear is 0x%08x\n", reg_val1);
+	mt76_rmw(dev, 0x7C00E238, BIT(0), 0);
+	u32 reg_val2 = mt76_rr(dev, 0x7C00E238);
+	printk(KERN_INFO "MT7902_DBG: Firmware loaded: Value at 0xFE238 (phys 0x7C00E238) after clear is 0x%08x\n", reg_val2);
+	
+	u32 reg_val3 = mt76_rr(dev, 0x70005054);
+	printk(KERN_INFO "MT7902_DBG: Firmware loaded: Value at 0x70005054 before is 0x%08x\n", reg_val3);
+	mt76_wr(dev, 0x70005054, (reg_val3 & 0xfffffff0));
+	u32 reg_val4 = mt76_rr(dev, 0x70005054);
+	printk(KERN_INFO "MT7902_DBG: Firmware loaded: Value at 0x70005054 after is 0x%08x\n", reg_val4);
 
 	for (i = 0; i < MT792x_WTBL_SIZE; i++)
 		mt7921_mac_wtbl_update(dev, i,
 				       MT_WTBL_UPDATE_ADM_COUNT_CLEAR);
 	for (i = 0; i < 2; i++)
 		mt792x_mac_init_band(dev, i);
+		
+	return 0;
 
-	return mt76_connac_mcu_set_rts_thresh(&dev->mt76, 0x92b, 0);
+//	return mt76_connac_mcu_set_rts_thresh(&dev->mt76, 0x92b, 0);
 }
 EXPORT_SYMBOL_GPL(mt7921_mac_init);
 
 static int __mt7921_init_hardware(struct mt792x_dev *dev)
 {
 	int ret;
+	struct timespec64 ts; /* For getting system time */
+	u32 sec, usec;
 
 	/* force firmware operation mode into normal state,
 	 * which should be set before firmware download stage.
 	 */
 	mt76_wr(dev, MT_SWDEF_MODE, MT_SWDEF_NORMAL_MODE);
 	ret = mt792x_mcu_init(dev);
+	if (ret)
+		goto out;
+		
+	//gen4m flow
+	ret = mt7902_mcu_set_basic_config(dev);
+	if (ret)
+		goto out;
+		
+	ktime_get_real_ts64(&ts);
+	sec = (u32)ts.tv_sec;
+	usec = (u32)(ts.tv_nsec / 1000); /* Convert nsec to usec */
+
+	ret = mt7902_mcu_sync_time(dev, sec, usec);
 	if (ret)
 		goto out;
 
@@ -285,10 +314,10 @@ int mt7921_register_device(struct mt792x_dev *dev)
 	INIT_DELAYED_WORK(&dev->mphy.mac_work, mt792x_mac_work);
 	INIT_DELAYED_WORK(&dev->phy.scan_work, mt7921_scan_work);
 	INIT_DELAYED_WORK(&dev->coredump.work, mt7921_coredump_work);
-#if IS_ENABLED(CONFIG_IPV6)
-	INIT_WORK(&dev->ipv6_ns_work, mt7921_set_ipv6_ns_work);
-	skb_queue_head_init(&dev->ipv6_ns_list);
-#endif
+//#if IS_ENABLED(CONFIG_IPV6)
+//	INIT_WORK(&dev->ipv6_ns_work, mt7921_set_ipv6_ns_work);
+//	skb_queue_head_init(&dev->ipv6_ns_list);
+//#endif
 	skb_queue_head_init(&dev->phy.scan_event_list);
 	skb_queue_head_init(&dev->coredump.msg_list);
 

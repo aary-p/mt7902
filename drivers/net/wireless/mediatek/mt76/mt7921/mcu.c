@@ -102,6 +102,7 @@ static int
 mt7921_mcu_set_ipv6_ns_filter(struct mt76_dev *dev,
 			      struct ieee80211_vif *vif, bool suspend)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_set_ipv6_ns_filter (contains uni commands)\n");
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 	struct {
 		struct {
@@ -142,6 +143,8 @@ void mt7921_mcu_set_suspend_iter(void *priv, u8 *mac, struct ieee80211_vif *vif)
 static void
 mt7921_mcu_uni_roc_event(struct mt792x_dev *dev, struct sk_buff *skb)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_uni_roc_event (contains uni commands)\n");
+
 	struct mt7921_roc_grant_tlv *grant;
 	struct mt76_connac2_mcu_rxd *rxd;
 	int duration;
@@ -251,6 +254,7 @@ mt7921_mcu_low_power_event(struct mt792x_dev *dev, struct sk_buff *skb)
 static void
 mt7921_mcu_tx_done_event(struct mt792x_dev *dev, struct sk_buff *skb)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_tx_done_event\n");
 	struct mt7921_mcu_tx_done_event *event;
 
 	skb_pull(skb, sizeof(struct mt76_connac2_mcu_rxd));
@@ -298,6 +302,7 @@ mt7921_mcu_rssi_monitor_event(struct mt792x_dev *dev, struct sk_buff *skb)
 static void
 mt7921_mcu_rx_unsolicited_event(struct mt792x_dev *dev, struct sk_buff *skb)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_rx_unsolicited_event (NOT UNI)\n");
 	struct mt76_connac2_mcu_rxd *rxd;
 
 	rxd = (struct mt76_connac2_mcu_rxd *)skb->data;
@@ -336,6 +341,7 @@ static void
 mt7921_mcu_uni_rx_unsolicited_event(struct mt792x_dev *dev,
 				    struct sk_buff *skb)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_uni_rx_unsolicited_event (UNI)\n");
 	struct mt76_connac2_mcu_rxd *rxd;
 
 	rxd = (struct mt76_connac2_mcu_rxd *)skb->data;
@@ -352,36 +358,50 @@ mt7921_mcu_uni_rx_unsolicited_event(struct mt792x_dev *dev,
 
 void mt7921_mcu_rx_event(struct mt792x_dev *dev, struct sk_buff *skb)
 {
-	struct mt76_connac2_mcu_rxd *rxd;
+    printk(KERN_INFO "MT7902: mt7921_mcu_rx_event\n");
+    struct mt76_connac2_mcu_rxd *rxd;
 
-	if (skb_linearize(skb))
-		return;
+    if (skb_linearize(skb))
+        return;
 
-	rxd = (struct mt76_connac2_mcu_rxd *)skb->data;
+    rxd = (struct mt76_connac2_mcu_rxd *)skb->data;
 
-	if (rxd->option & MCU_UNI_CMD_UNSOLICITED_EVENT) {
-		mt7921_mcu_uni_rx_unsolicited_event(dev, skb);
-		return;
-	}
+    /*
+     * DEBUG: Print all relevant parameters from the event header
+     */
+    printk(KERN_INFO "MT7902: MCU event rxd:\n"
+           "  eid: 0x%x\n"
+           "  ext_eid: 0x%x\n"
+           "  seq: %u\n"
+           "  option: 0x%x\n"
+           "  (is_unsolicited_event): %d\n",
+           rxd->eid, rxd->ext_eid, rxd->seq, rxd->option,
+           !!(rxd->option & MCU_UNI_CMD_UNSOLICITED_EVENT));
 
-	if (rxd->eid == 0x6) {
-		mt76_mcu_rx_event(&dev->mt76, skb);
-		return;
-	}
+    if (rxd->option & MCU_UNI_CMD_UNSOLICITED_EVENT) {
+    	printk(KERN_INFO "MT7902: MCU event UNI\n");
+        mt7921_mcu_uni_rx_unsolicited_event(dev, skb);
+        return;
+    }
 
-	if (rxd->ext_eid == MCU_EXT_EVENT_RATE_REPORT ||
-	    rxd->eid == MCU_EVENT_BSS_BEACON_LOSS ||
-	    rxd->eid == MCU_EVENT_SCHED_SCAN_DONE ||
-	    rxd->eid == MCU_EVENT_RSSI_NOTIFY ||
-	    rxd->eid == MCU_EVENT_SCAN_DONE ||
-	    rxd->eid == MCU_EVENT_TX_DONE ||
-	    rxd->eid == MCU_EVENT_DBG_MSG ||
-	    rxd->eid == MCU_EVENT_COREDUMP ||
-	    rxd->eid == MCU_EVENT_LP_INFO ||
-	    !rxd->seq)
-		mt7921_mcu_rx_unsolicited_event(dev, skb);
-	else
-		mt76_mcu_rx_event(&dev->mt76, skb);
+    if (rxd->eid == 0x6) {
+        mt76_mcu_rx_event(&dev->mt76, skb);
+        return;
+    }
+
+    if (rxd->ext_eid == MCU_EXT_EVENT_RATE_REPORT ||
+        rxd->eid == MCU_EVENT_BSS_BEACON_LOSS ||
+        rxd->eid == MCU_EVENT_SCHED_SCAN_DONE ||
+        rxd->eid == MCU_EVENT_RSSI_NOTIFY ||
+        rxd->eid == MCU_EVENT_SCAN_DONE ||
+        rxd->eid == MCU_EVENT_TX_DONE ||
+        rxd->eid == MCU_EVENT_DBG_MSG ||
+        rxd->eid == MCU_EVENT_COREDUMP ||
+        rxd->eid == MCU_EVENT_LP_INFO ||
+        !rxd->seq)
+        mt7921_mcu_rx_unsolicited_event(dev, skb);
+    else
+        mt76_mcu_rx_event(&dev->mt76, skb);
 }
 
 /** starec & wtbl **/
@@ -389,13 +409,14 @@ int mt7921_mcu_uni_tx_ba(struct mt792x_dev *dev,
 			 struct ieee80211_ampdu_params *params,
 			 bool enable)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_uni_tx_ba (contains uni commands)\n");
 	struct mt792x_sta *msta = (struct mt792x_sta *)params->sta->drv_priv;
 
 	if (enable && !params->amsdu)
 		msta->deflink.wcid.amsdu = false;
 
 	return mt76_connac_mcu_sta_ba(&dev->mt76, &msta->vif->bss_conf.mt76, params,
-				      MCU_UNI_CMD(STA_REC_UPDATE),
+				      MCU_EXT_CMD(STA_REC_UPDATE),
 				      enable, true);
 }
 
@@ -403,10 +424,11 @@ int mt7921_mcu_uni_rx_ba(struct mt792x_dev *dev,
 			 struct ieee80211_ampdu_params *params,
 			 bool enable)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_uni_rx_ba (contains uni commands)\n");
 	struct mt792x_sta *msta = (struct mt792x_sta *)params->sta->drv_priv;
 
 	return mt76_connac_mcu_sta_ba(&dev->mt76, &msta->vif->bss_conf.mt76, params,
-				      MCU_UNI_CMD(STA_REC_UPDATE),
+				      MCU_EXT_CMD(STA_REC_UPDATE),
 				      enable, false);
 }
 
@@ -425,14 +447,14 @@ static int mt7921_load_clc(struct mt792x_dev *dev, const char *fw_name)
 	if (mt7921_disable_clc ||
 	    mt76_is_usb(&dev->mt76))
 		return 0;
-
+/*
 	if (mt76_is_mmio(&dev->mt76)) {
 		ret = mt7921_mcu_read_eeprom(dev, MT_EE_HW_TYPE, &hw_encap);
 		if (ret)
 			return ret;
 		hw_encap = u8_get_bits(hw_encap, MT_EE_HW_TYPE_ENCAP);
 	}
-
+*/
 	ret = request_firmware(&fw, fw_name, mdev->dev);
 	if (ret)
 		return ret;
@@ -523,9 +545,74 @@ static void mt7921_mcu_parse_tx_resource(struct mt76_dev *dev,
 }
 
 static void mt7921_mcu_parse_phy_cap(struct mt76_dev *dev,
-				     struct sk_buff *skb)
+                                   struct sk_buff *skb)
 {
-	struct mt7921_phy_cap {
+    struct mt7921_phy_cap {
+        u8 ht;
+        u8 vht;
+        u8 _5g;
+        u8 max_bw;
+        u8 nss;
+        u8 dbdc;
+        u8 tx_ldpc;
+        u8 rx_ldpc;
+        u8 tx_stbc;
+        u8 rx_stbc;
+        u8 hw_path;
+        u8 he;
+    } __packed * cap;
+
+    enum {
+        WF0_24G,
+        WF0_5G
+    };
+
+    bool not_support_ac, not_support_ax; /* For comparison */
+
+    cap = (struct mt7921_phy_cap *)skb->data;
+
+    dev->phy.antenna_mask = BIT(cap->nss) - 1;
+    dev->phy.chainmask = dev->phy.antenna_mask;
+    dev->phy.cap.has_2ghz = cap->hw_path & BIT(WF0_24G);
+    dev->phy.cap.has_5ghz = cap->hw_path & BIT(WF0_5G);
+
+    /* Derive the 'NotSupport' flags for comparison */
+    not_support_ac = (cap->vht) ? 0 : 1;
+    not_support_ax = (cap->he) ? 0 : 1;
+
+    /*
+     * DEBUG: Print all raw and derived capability values
+     */
+    dev_info(dev->dev,
+         "MT7902: mt7921_mcu_parse_phy_cap Final Adapter Values:\n"
+         "  VHT (Sta/Ap/Go/Gc): 0x%x\n"
+         "  _5g (support): %d (gen4m fgIsHw5GBandDisabled: %d)\n"
+         "  nss: %d (derived antenna_mask: 0x%x)\n"
+         "  LDPC (Tx/Rx): 0x%x, 0x%x\n"
+         "  STBC (Tx/Rx): 0x%x, 0x%x\n"
+         "  ucHwNotSupportAC: %d, ucHwNotSupportAX: %d\n"
+         "  hw_path: %u (gen4m u2WifiPath: 15)\n"
+         "  max_bw: %d (gen4m Bandwidth: 3)\n"
+         "  HE: 0x%x, DBDC: %d\n"
+         "  Derived has_2ghz: %d, has_5ghz: %d\n",
+         cap->vht,
+         cap->_5g, !cap->_5g, /* Invert cap->_5g to match 'Disabled' logic */
+         cap->nss, dev->phy.antenna_mask,
+         cap->tx_ldpc, cap->rx_ldpc,
+         cap->tx_stbc, cap->rx_stbc,
+         not_support_ac, not_support_ax,
+         cap->hw_path,
+         cap->max_bw,
+         cap->he, cap->dbdc,
+         !!(dev->phy.cap.has_2ghz), !!(dev->phy.cap.has_5ghz));
+}
+
+static void
+mt7902_mcu_parse_phy_cap(struct mt792x_dev *dev, char *data)
+{
+	struct mt76_phy *mphy = &dev->mt76.phy;
+	struct mt76_dev *mdev = mphy->dev;
+	struct mt7925_mcu_phy_cap {
 		u8 ht;
 		u8 vht;
 		u8 _5g;
@@ -538,19 +625,19 @@ static void mt7921_mcu_parse_phy_cap(struct mt76_dev *dev,
 		u8 rx_stbc;
 		u8 hw_path;
 		u8 he;
+		u8 eht;
 	} __packed * cap;
-
 	enum {
 		WF0_24G,
 		WF0_5G
 	};
 
-	cap = (struct mt7921_phy_cap *)skb->data;
+	cap = (struct mt7925_mcu_phy_cap *)data;
 
-	dev->phy.antenna_mask = BIT(cap->nss) - 1;
-	dev->phy.chainmask = dev->phy.antenna_mask;
-	dev->phy.cap.has_2ghz = cap->hw_path & BIT(WF0_24G);
-	dev->phy.cap.has_5ghz = cap->hw_path & BIT(WF0_5G);
+	mdev->phy.antenna_mask = BIT(cap->nss) - 1;
+	mdev->phy.chainmask = mdev->phy.antenna_mask;
+	mdev->phy.cap.has_2ghz = cap->hw_path & BIT(WF0_24G);
+	mdev->phy.cap.has_5ghz = cap->hw_path & BIT(WF0_5G);
 }
 
 static int mt7921_mcu_get_nic_capability(struct mt792x_phy *mphy)
@@ -573,6 +660,9 @@ static int mt7921_mcu_get_nic_capability(struct mt792x_phy *mphy)
 		ret = -EINVAL;
 		goto out;
 	}
+	
+	dev_info(phy->dev->dev, "Parsing NIC Capability Event: Total Elements = %u\n",
+		le16_to_cpu(hdr->n_element));
 
 	skb_pull(skb, sizeof(*hdr));
 
@@ -583,23 +673,40 @@ static int mt7921_mcu_get_nic_capability(struct mt792x_phy *mphy)
 		} __packed * tlv = (struct tlv_hdr *)skb->data;
 		int len;
 
-		if (skb->len < sizeof(*tlv))
+		if (skb->len < sizeof(*tlv)) {
+			dev_warn(phy->dev->dev, "TLV[%d]: Not enough data for header\n", i);
 			break;
+		}
+		len = le32_to_cpu(tlv->len);
+		u32 type = le32_to_cpu(tlv->type); /* Store type before skb_pull */
 
 		skb_pull(skb, sizeof(*tlv));
-
-		len = le32_to_cpu(tlv->len);
-		if (skb->len < len)
+		
+		if (skb->len < len) {
+			dev_warn(phy->dev->dev, "TLV[%d]: Tag=0x%X, Expected Len=%d, Available Len=%u\n",
+				i, type, len, skb->len);
 			break;
-
+		}
+		
+		dev_info(phy->dev->dev, "TLV[%d]: Tag=0x%X, Len=%d\n", i, type, len);
+		print_hex_dump_bytes("TLV Data: ", DUMP_PREFIX_OFFSET, skb->data, len);
+			
 		switch (le32_to_cpu(tlv->type)) {
 		case MT_NIC_CAP_6G:
-			phy->cap.has_6ghz = skb->data[0];
+			printk(KERN_INFO "MT7902: NIC_CAP_6G\n");
+			//phy->cap.has_6ghz = skb->data[0];
+			break;
+		case MT_NIC_CAP_MAC:
+			printk(KERN_INFO "MT7902: MT_NIC_CAP_MAC\n");
 			break;
 		case MT_NIC_CAP_MAC_ADDR:
+			printk(KERN_INFO "MT7902: MT_NIC_CAP_MAC_ADDR\n");
 			memcpy(phy->macaddr, (void *)skb->data, ETH_ALEN);
+			printk(KERN_INFO "MT7902: MAC address set to %pM\n",
+           			phy->macaddr);
 			break;
 		case MT_NIC_CAP_PHY:
+			printk(KERN_INFO "MT7902: MT_NIC_CAP_PHY\n");
 			mt7921_mcu_parse_phy_cap(phy->dev, skb);
 			break;
 		case MT_NIC_CAP_TX_RESOURCE:
@@ -608,6 +715,7 @@ static int mt7921_mcu_get_nic_capability(struct mt792x_phy *mphy)
 							     skb);
 			break;
 		case MT_NIC_CAP_CHIP_CAP:
+			printk(KERN_INFO "MT7902: MT_NIC_CAP_CHIP_CAP\n");
 			memcpy(&mphy->chip_cap, (void *)skb->data, sizeof(u64));
 			break;
 		default:
@@ -634,11 +742,69 @@ int mt7921_mcu_fw_log_2_host(struct mt792x_dev *dev, u8 ctrl)
 				 &data, sizeof(data), false);
 }
 
+int mt7902_firmware_state(struct mt792x_dev *dev, bool wa)
+{
+	u32 state = FIELD_PREP(MT_TOP_MISC_FW_STATE,
+			       wa ? FW_STATE_RDY : FW_STATE_FW_DOWNLOAD);
+
+	if (!mt76_poll_msec(dev, MT_TOP_MISC, MT_TOP_MISC_FW_STATE,
+			    state, 1500)) {
+		dev_err(dev->mt76.dev, "Timeout for initializing firmware\n");
+		return -EIO;
+	}
+	return 0;
+}
+
+int mt7902_load_firmware(struct mt792x_dev *dev)
+{
+	int ret;
+
+	if (mt7902_firmware_state(dev, false)) {
+		mt76_connac_mcu_restart(&dev->mt76);
+		ret = mt7902_firmware_state(dev, false);
+		if (ret) {
+			dev_err(dev->mt76.dev,
+				"Firmware is not ready for download\n");
+			return ret;
+		}
+	}
+
+	ret = mt76_connac2_load_patch(&dev->mt76, mt792x_patch_name(dev));
+	if (ret)
+		return ret;
+
+	ret = mt76_connac2_load_ram(&dev->mt76, mt792x_ram_name(dev), NULL);
+	if (ret)
+		return ret;
+
+	if (!mt76_poll_msec(dev, MT_CONN_ON_MISC, MT_TOP_MISC2_FW_N9_RDY,
+			    MT_TOP_MISC2_FW_N9_RDY, 1500)) {
+		dev_err(dev->mt76.dev, "Timeout for initializing firmware\n");
+
+		return -EIO;
+	}
+
+#ifdef CONFIG_PM2
+	dev->mt76.hw->wiphy->wowlan = &mt76_connac_wowlan_support;
+#endif /* CONFIG_PM */
+
+	dev_dbg(dev->mt76.dev, "MT7902: Firmware init done\n");
+
+	return 0;
+}
+
 int mt7921_run_firmware(struct mt792x_dev *dev)
 {
 	int err;
+	
+	mt76_wr(dev, MT_SWDEF_MODE, MT_SWDEF_NORMAL_MODE);
 
-	err = mt792x_load_firmware(dev);
+//	err = mt792x_load_firmware(dev);
+	err = mt7902_load_firmware(dev);
+	if (err)
+		return err;
+		
+	err = mt7902_mcu_send_dummy(dev);
 	if (err)
 		return err;
 
@@ -651,7 +817,8 @@ int mt7921_run_firmware(struct mt792x_dev *dev)
 	if (err)
 		return err;
 
-	return mt7921_mcu_fw_log_2_host(dev, 1);
+	return 0;
+//	return mt7921_mcu_fw_log_2_host(dev, 1);
 }
 EXPORT_SYMBOL_GPL(mt7921_run_firmware);
 
@@ -767,6 +934,7 @@ int mt7921_mcu_set_roc(struct mt792x_phy *phy, struct mt792x_vif *vif,
 		       struct ieee80211_channel *chan, int duration,
 		       enum mt7921_roc_req type, u8 token_id)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_set_roc (contains uni commands)\n");
 	int center_ch = ieee80211_frequency_to_channel(chan->center_freq);
 	struct mt792x_dev *dev = phy->dev;
 	struct {
@@ -833,6 +1001,7 @@ int mt7921_mcu_set_roc(struct mt792x_phy *phy, struct mt792x_vif *vif,
 int mt7921_mcu_abort_roc(struct mt792x_phy *phy, struct mt792x_vif *vif,
 			 u8 token_id)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_abort_roc (contains uni commands)\n");
 	struct mt792x_dev *dev = phy->dev;
 	struct {
 		struct {
@@ -860,11 +1029,97 @@ int mt7921_mcu_abort_roc(struct mt792x_phy *phy, struct mt792x_vif *vif,
 				 &req, sizeof(req), false);
 }
 
-int mt7921_mcu_set_chan_info(struct mt792x_phy *phy, int cmd)
+int mt7902_mcu_set_channel_domain(struct mt76_phy *phy)
 {
+	int len, i; /* Removed unused local variables n_max_channels, n_2ch, etc. */
+	struct mt76_connac_mcu_channel_domain {
+		u8 alpha2[4];
+		u8 bw_2g;
+		u8 bw_5g;
+		u8 bw_6g;
+		u8 pad;
+		u8 n_2ch;
+		u8 n_5ch;
+		u8 n_6ch;
+		u8 pad2;
+	} __packed hdr = {
+		/* Hardcoded for 2.4 GHz ONLY */
+		.bw_2g = 0, /* BW_20_40M */
+		.bw_5g = 0, /* No BW support */
+		.bw_6g = 0, /* No BW support */
+		.n_2ch = 0, /* FIX: Initialize hdr.n_2ch to 0 */
+		.n_5ch = 0, /* No 5 GHz channels */
+		.n_6ch = 0, /* No 6 GHz channels */
+	};
+	struct mt76_connac_mcu_chan {
+		__le16 hw_value;
+		__le16 pad;
+		__le32 flags;
+	} __packed channel;
+	struct mt76_dev *dev = phy->dev;
+	struct ieee80211_channel *chan;
+	struct sk_buff *skb;
+
+	len = sizeof(hdr) + phy->sband_2g.sband.n_channels * sizeof(channel);
+
+	skb = mt76_mcu_msg_alloc(dev, NULL, len);
+	if (!skb)
+		return -ENOMEM;
+
+	skb_reserve(skb, sizeof(hdr));
+
+	for (i = 0; i < phy->sband_2g.sband.n_channels; i++) {
+		chan = &phy->sband_2g.sband.channels[i];
+		if (chan->flags & IEEE80211_CHAN_DISABLED)
+			continue;
+
+		channel.hw_value = cpu_to_le16(chan->hw_value);
+		channel.flags = cpu_to_le32(chan->flags);
+		channel.pad = 0;
+
+		skb_put_data(skb, &channel, sizeof(channel));
+		hdr.n_2ch++; /* FIX: Increment the struct member directly */
+	}
+
+	BUILD_BUG_ON(sizeof(dev->alpha2) > sizeof(hdr.alpha2));
+	memcpy(hdr.alpha2, dev->alpha2, sizeof(dev->alpha2));
+	memcpy(__skb_push(skb, sizeof(hdr)), &hdr, sizeof(hdr));
+
+	/* --- START: ADD THESE PRINT STATEMENTS FOR DEBUGGING --- */
+	printk(KERN_INFO "MT7902_DBG: Sending SET_CHAN_DOMAIN\n");
+	printk(KERN_INFO "  alpha2: %u%u%u%u\n", hdr.alpha2[0], hdr.alpha2[1], hdr.alpha2[2], hdr.alpha2[3]);
+	printk(KERN_INFO "  bw_2g: %u, bw_5g: %u, bw_6g: %u\n", hdr.bw_2g , hdr.bw_5g, hdr.bw_6g);
+	printk(KERN_INFO "  n_channels (2/5/6G): %u / %u / %u\n", hdr.n_2ch, hdr.n_5ch, hdr.n_6ch);
+	/* --- END: ADD THESE PRINT STATEMENTS FOR DEBUGGING --- */
+
+	return mt76_mcu_skb_send_msg(dev, skb, MCU_UNI_CMD(SET_DOMAIN_INFO),
+				     true);
+}
+EXPORT_SYMBOL_GPL(mt7902_mcu_set_channel_domain);
+
+int mt7921_mcu_set_chan_info(struct mt792x_phy *phy, int cmd)
+{	
 	struct mt792x_dev *dev = phy->dev;
 	struct cfg80211_chan_def *chandef = &phy->mt76->chandef;
 	int freq1 = chandef->center_freq1;
+	
+	printk(KERN_INFO "MT7902: mt7921_mcu_set_chan_info: Dumping chandef:\n"
+		   "  chandef->chan->band: %d (%s)\n"
+		   "  chandef->chan->center_freq: %u\n"
+		   "  chandef->chan->hw_value: %u\n"
+		   "  chandef->width: %d\n"
+		   "  chandef->center_freq1: %u\n"
+		   "  chandef->center_freq2: %u\n",
+		   chandef->chan->band,
+		   (chandef->chan->band == NL80211_BAND_2GHZ) ? "2G" :
+		   (chandef->chan->band == NL80211_BAND_5GHZ) ? "5G" :
+		   (chandef->chan->band == NL80211_BAND_6GHZ) ? "6G" : "Other",
+		   chandef->chan->center_freq,
+		   chandef->chan->hw_value,
+		   chandef->width,
+		   chandef->center_freq1,
+		   chandef->center_freq2);
+	
 	struct {
 		u8 control_ch;
 		u8 center_ch;
@@ -897,9 +1152,10 @@ int mt7921_mcu_set_chan_info(struct mt792x_phy *phy, int cmd)
 		req.channel_band = chandef->chan->band;
 
 	if (cmd == MCU_EXT_CMD(SET_RX_PATH) ||
-	    dev->mt76.hw->conf.flags & IEEE80211_CONF_MONITOR)
+	    dev->mt76.hw->conf.flags & IEEE80211_CONF_MONITOR) {
+	    	printk(KERN_INFO "MT7902: Channel switch reason normal\n");
 		req.switch_reason = CH_SWITCH_NORMAL;
-	else if (phy->mt76->offchannel)
+	} else if (phy->mt76->offchannel)
 		req.switch_reason = CH_SWITCH_SCAN_BYPASS_DPD;
 	else if (!cfg80211_reg_can_beacon(dev->mt76.hw->wiphy, chandef,
 					  NL80211_IFTYPE_AP))
@@ -907,36 +1163,73 @@ int mt7921_mcu_set_chan_info(struct mt792x_phy *phy, int cmd)
 	else
 		req.switch_reason = CH_SWITCH_NORMAL;
 
-	if (cmd == MCU_EXT_CMD(CHANNEL_SWITCH))
+	if (cmd == MCU_EXT_CMD(CHANNEL_SWITCH)) {
+		printk(KERN_INFO "MT7902: Channel switch\n");
 		req.rx_streams = hweight8(req.rx_streams);
-
+	}
 	if (chandef->width == NL80211_CHAN_WIDTH_80P80) {
 		int freq2 = chandef->center_freq2;
-
 		req.center_ch2 = ieee80211_frequency_to_channel(freq2);
 	}
+	
+	printk(KERN_INFO "MT7902: mt7921_mcu_set_chan_info params:\n"
+		   "  cmd: 0x%x\n"
+		   "  freq1: %d\n"
+		   "  req.control_ch: %u\n"
+		   "  req.center_ch: %u\n"
+		   "  req.bw: %u\n"
+		   "  req.band_idx: %u\n",
+		   cmd, freq1, req.control_ch, req.center_ch, req.bw, req.band_idx);
+	
+	print_hex_dump(KERN_INFO, "req: ", DUMP_PREFIX_OFFSET, 16, 1,
+		       &req, sizeof(req), true);
 
 	return mt76_mcu_send_msg(&dev->mt76, cmd, &req, sizeof(req), true);
 }
 
 int mt7921_mcu_set_eeprom(struct mt792x_dev *dev)
 {
-	struct req_hdr {
-		u8 buffer_mode;
-		u8 format;
-		__le16 len;
-	} __packed req = {
-		.buffer_mode = EE_MODE_EFUSE,
-		.format = EE_FORMAT_WHOLE,
-	};
+    struct req_hdr {
+        u8 buffer_mode;
+        u8 format;
+        __le16 len;
+    } __packed req = {
+        .buffer_mode = EE_MODE_EFUSE,
+        .format = EE_FORMAT_WHOLE,
+        /* .len is 0 by default initialization */
+    };
+    unsigned int req_len = sizeof(req);
+    int cmd = MCU_EXT_CMD(EFUSE_BUFFER_MODE); /* Get cmd ID for logging */
 
-	return mt76_mcu_send_msg(&dev->mt76, MCU_EXT_CMD(EFUSE_BUFFER_MODE),
-				 &req, sizeof(req), true);
+    /*
+     * DEBUG: Print parameters and payload
+     */
+    dev_info(dev->mt76.dev,
+         "MT7902: mt7921_mcu_set_eeprom: Sending EFUSE_BUFFER_MODE (cmd=0x%x)\n"
+         "  buffer_mode (ucSourceMode): 0x%02x\n"
+         "  format (ucContentFormat): 0x%02x\n"
+         "  len (u2Count): %u\n"
+         "  req_len (total payload size): %u\n",
+         cmd,
+         req.buffer_mode,
+         req.format,
+         le16_to_cpu(req.len),
+         req_len);
+
+    print_hex_dump(KERN_INFO, "MT7902 req: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   &req, req_len, true);
+    /*
+     * END DEBUG
+     */
+
+    return mt76_mcu_send_msg(&dev->mt76, cmd,
+                           &req, req_len, true);
 }
 EXPORT_SYMBOL_GPL(mt7921_mcu_set_eeprom);
 
 int mt7921_mcu_uni_bss_ps(struct mt792x_dev *dev, struct ieee80211_vif *vif)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_uni_bss_ps (contains uni commands)\n");
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 	struct {
 		struct {
@@ -976,6 +1269,7 @@ static int
 mt7921_mcu_uni_bss_bcnft(struct mt792x_dev *dev, struct ieee80211_vif *vif,
 			 bool enable)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_uni_bss_bcnft (contains uni commands)\n");
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 	struct {
 		struct {
@@ -1050,13 +1344,14 @@ int mt7921_mcu_sta_update(struct mt792x_dev *dev, struct ieee80211_sta *sta,
 			  struct ieee80211_vif *vif, bool enable,
 			  enum mt76_sta_info_state state)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_sta_update (gen4m)\n");
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 	int rssi = -ewma_rssi_read(&mvif->bss_conf.rssi);
 	struct mt76_sta_cmd_info info = {
 		.sta = sta,
 		.vif = vif,
 		.enable = enable,
-		.cmd = MCU_UNI_CMD(STA_REC_UPDATE),
+		.cmd = MCU_EXT_CMD(STA_REC_UPDATE),
 		.state = state,
 		.offload_fw = true,
 		.rcpi = to_rcpi(rssi),
@@ -1066,23 +1361,28 @@ int mt7921_mcu_sta_update(struct mt792x_dev *dev, struct ieee80211_sta *sta,
 	msta = sta ? (struct mt792x_sta *)sta->drv_priv : NULL;
 	info.wcid = msta ? &msta->deflink.wcid : &mvif->sta.deflink.wcid;
 	info.newly = msta ? state != MT76_STA_INFO_STATE_ASSOC : true;
+	
+	return mt7902_mcu_sta_update_gen4m(dev, sta, vif, enable, state);
 
-	return mt76_connac_mcu_sta_cmd(&dev->mphy, &info);
+//	return mt76_connac_mcu_sta_cmd(&dev->mphy, &info);
 }
 
 int mt7921_mcu_set_beacon_filter(struct mt792x_dev *dev,
 				 struct ieee80211_vif *vif,
 				 bool enable)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_set_beacon_filter (contains set_rxfilter)\n");
+
 #define MT7921_FIF_BIT_CLR		BIT(1)
 #define MT7921_FIF_BIT_SET		BIT(0)
+
 	int err;
 
 	if (enable) {
-		err = mt7921_mcu_uni_bss_bcnft(dev, vif, true);
-		if (err)
-			return err;
-
+//		err = mt7921_mcu_uni_bss_bcnft(dev, vif, true);
+//		if (err)
+//			return err;
+/*
 		err = mt7921_mcu_set_rxfilter(dev, 0,
 					      MT7921_FIF_BIT_SET,
 					      MT_WF_RFCR_DROP_OTHER_BEACON);
@@ -1101,7 +1401,9 @@ int mt7921_mcu_set_beacon_filter(struct mt792x_dev *dev,
 				      MT_WF_RFCR_DROP_OTHER_BEACON);
 	if (err)
 		return err;
-
+*/
+		return 0;
+	}
 	return 0;
 }
 
@@ -1131,6 +1433,7 @@ int mt7921_get_txpwr_info(struct mt792x_dev *dev, struct mt7921_txpwr *txpwr)
 int mt7921_mcu_set_sniffer(struct mt792x_dev *dev, struct ieee80211_vif *vif,
 			   bool enable)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_set_sniffer (contains uni commands)\n");
 	struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
 	struct {
 		struct {
@@ -1161,6 +1464,7 @@ int mt7921_mcu_set_sniffer(struct mt792x_dev *dev, struct ieee80211_vif *vif,
 int mt7921_mcu_config_sniffer(struct mt792x_vif *vif,
 			      struct ieee80211_chanctx_conf *ctx)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_config_sniffer (contains uni commands)\n");
 	struct cfg80211_chan_def *chandef = &ctx->def;
 	int freq1 = chandef->center_freq1, freq2 = chandef->center_freq2;
 	static const u8 ch_band[] = {
@@ -1232,6 +1536,7 @@ mt7921_mcu_uni_add_beacon_offload(struct mt792x_dev *dev,
 				  struct ieee80211_vif *vif,
 				  bool enable)
 {
+	printk(KERN_INFO "MT7902: mt7921_mcu_config_sniffer (contains uni commands)\n");
 	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
 	struct mt76_wcid *wcid = &dev->mt76.global_wcid;
 	struct ieee80211_mutable_offsets offs;
@@ -1449,25 +1754,55 @@ int mt7921_mcu_wf_rf_pin_ctrl(struct mt792x_phy *phy, u8 action)
 }
 
 int mt7921_mcu_set_rxfilter(struct mt792x_dev *dev, u32 fif,
-			    u8 bit_op, u32 bit_map)
+               u8 bit_op, u32 bit_map)
 {
-	struct {
-		u8 rsv[4];
-		u8 mode;
-		u8 rsv2[3];
-		__le32 fif;
-		__le32 bit_map; /* bit_* for bitmap update */
-		u8 bit_op;
-		u8 pad[51];
-	} __packed data = {
-		.mode = fif ? 1 : 2,
-		.fif = cpu_to_le32(fif),
-		.bit_map = cpu_to_le32(bit_map),
-		.bit_op = bit_op,
-	};
+    struct mt7902_cmd_rx_packet_filter {
+        __le32 u4RxPacketFilter; /* The filter bitmap */
+        u8 padding[64];        /* The rest of the payload */
+    } __packed;
 
-	return mt76_mcu_send_msg(&dev->mt76, MCU_CE_CMD(SET_RX_FILTER),
-				 &data, sizeof(data), false);
+    /* Use the gen4m-compatible struct */
+    struct mt7902_cmd_rx_packet_filter req;
+    unsigned int req_len = sizeof(req);
+    int cmd = MCU_CE_CMD(SET_RX_FILTER);
+    int ret;
+
+    /*
+     * The mt76 function is called with fif=the_filter, bit_op=0, bit_map=0.
+     * The gen4m function only uses the filter. We will ignore bit_op/bit_map
+     * and just use 'fif' as the main filter.
+     */
+    memset(&req, 0, req_len);
+    req.u4RxPacketFilter = cpu_to_le32(fif);
+
+    /*
+     * DEBUG: Print all parameters and payload
+     */
+    dev_info(dev->mt76.dev,
+         "MT7902: mt7921_mcu_set_rxfilter: Sending SET_RX_FILTER (cmd=0x%x)\n"
+         "  Input fif (u4RxPacketFilter): 0x%08x\n"
+         "  Input bit_op: 0x%x\n"
+         "  Input bit_map: 0x%x\n"
+         "  PayloadLen: %u\n",
+         cmd,
+         fif,
+         bit_op,
+         bit_map,
+         req_len);
+
+    print_hex_dump(KERN_INFO, "MT7902 req: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   &req, req_len, true);
+    /*
+     * END DEBUG
+     */
+
+    /* Send as a SET command, no response needed (matches gen4m NeedResp=0) */
+    ret = mt76_mcu_send_msg(&dev->mt76, cmd, &req, req_len, false);
+
+    if (ret)
+        dev_err(dev->mt76.dev, "MT7902: FAILED to send SET_RX_FILTER (0x0a)\n");
+
+    return ret;
 }
 
 int mt7921_mcu_set_rssimonitor(struct mt792x_dev *dev, struct ieee80211_vif *vif)
@@ -1489,4 +1824,926 @@ int mt7921_mcu_set_rssimonitor(struct mt792x_dev *dev, struct ieee80211_vif *vif
 
 	return mt76_mcu_send_msg(&dev->mt76, MCU_CE_CMD(RSSI_MONITOR),
 				 &data, sizeof(data), false);
+}
+
+int mt7902_mcu_add_dev_info(struct mt76_phy *phy, 
+			    struct ieee80211_bss_conf *bss_conf, 
+			    struct mt76_vif_link *mvif, bool enable)
+{
+	int ret;
+	struct mt76_dev *dev = phy->dev;
+	struct {
+		struct req_hdr {
+			u8 omac_idx;
+			u8 band_idx;
+			__le16 tlv_num;
+			u8 is_tlv_append;
+			u8 rsv[3];
+		} __packed hdr;
+		struct req_tlv {
+			__le16 tag;
+			__le16 len;
+			u8 active;
+			u8 band_idx;
+			u8 omac_addr[ETH_ALEN];
+		} __packed tlv;
+	} data = {
+		.hdr = {
+			.omac_idx = mvif->omac_idx,
+			.band_idx = mvif->band_idx,
+			.tlv_num = cpu_to_le16(1),
+			.is_tlv_append = 1,
+		},
+		.tlv = {
+			.tag = cpu_to_le16(DEV_INFO_ACTIVE),
+			.len = cpu_to_le16(sizeof(struct req_tlv)),
+			.active = enable,
+			.band_idx = mvif->band_idx,
+		},
+	};
+
+	memcpy(data.tlv.omac_addr, bss_conf->addr, ETH_ALEN);
+	
+	printk(KERN_INFO "MT7902: mt7902_mcu_add_dev_info (enable=%d)\n", enable);
+	printk(KERN_INFO "MT7902: Sending DEV_INFO_UPDATE (cmd=0x%x, size=%lu)\n",
+		MCU_EXT_CMD(DEV_INFO_UPDATE), sizeof(data));
+	printk(KERN_INFO "  hdr.omac_idx: %u\n", data.hdr.omac_idx);
+	printk(KERN_INFO "  hdr.band_idx: %u\n", data.hdr.band_idx);
+	printk(KERN_INFO "  hdr.tlv_num: %u\n", le16_to_cpu(data.hdr.tlv_num));
+	printk(KERN_INFO "  hdr.is_tlv_append: %u\n", data.hdr.is_tlv_append);
+	printk(KERN_INFO "  tlv.tag: 0x%x\n", le16_to_cpu(data.tlv.tag));
+	printk(KERN_INFO "  tlv.len: %u\n", le16_to_cpu(data.tlv.len));
+	printk(KERN_INFO "  tlv.active: %u\n", data.tlv.active);
+	printk(KERN_INFO "  tlv.band_idx: %u\n", data.tlv.band_idx);
+	printk(KERN_INFO "  tlv.omac_addr: %pM\n", data.tlv.omac_addr);
+	
+	return mt76_mcu_send_msg(dev, MCU_EXT_CMD(DEV_INFO_UPDATE),
+				 &data, sizeof(data), true);
+}
+/*
+ret = mt76_mcu_send_msg(dev, MCU_EXT_CMD(DEV_INFO_UPDATE),
+				 &data, sizeof(data), true);
+	if (ret < 0)
+		return ret;
+
+struct
+	
+	MCU_EXT_CMD_BSS_INFO_UPDATE
+	ret = mt76_mcu_send_msg(dev, MCU_EXT_CMD(BSS_INFO_UPDATE),
+				 &data, sizeof(data), true);
+	if (ret < 0)
+		return ret;
+*/
+
+/* This is the modified function */
+int mt7902_mcu_add_dev_gen4m(struct mt76_phy *phy, struct ieee80211_vif *vif,
+                           struct mt76_wcid *wcid, bool enable)
+{
+    struct mt7902_bss_activate_ctrl {
+        u8 ucBssIndex;        /* Offset 0 */
+        u8 ucActive;          /* Offset 1 */
+        u8 ucNetworkType;     /* Offset 2 */
+        u8 ucOwnMacAddrIndex; /* Offset 3 */
+        u8 aucBssMacAddr[6];  /* Offset 4-9 */
+        u8 ucBMCWlanIndex;    /* Offset 10 */
+        u8 ucReserved;        /* Offset 11 */
+    } __packed;
+    struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
+    struct mt76_dev *dev = phy->dev;
+    struct mt7902_bss_activate_ctrl req;
+    unsigned int req_len = sizeof(req);
+    int cmd = MCU_CE_CMD(BSS_ACTIVATE_CTRL);
+    int ret;
+
+    memset(&req, 0, req_len);
+
+    /* 1. Map parameters based on gen4m logs */
+
+    /* ucBssIndex: 0 */
+    req.ucBssIndex = mvif->idx;
+
+    /* ucActive: 1 */
+    req.ucActive = enable ? 1 : 0;
+
+    /* ucNetworkType: 0 (This is a DISCREPANCY, gen4m log shows 0) */
+    req.ucNetworkType = 0;
+
+    /* ucOwnMacAddrIndex: 1 (This is a DISCREPANCY, gen4m log shows 1) */
+    req.ucOwnMacAddrIndex = 1;
+
+    /* aucBssMacAddr: 50:5a:xx:xx:xx:b0 (vif->addr is correct) */
+    memcpy(req.aucBssMacAddr, vif->addr, ETH_ALEN);
+
+    /* ucBMCWlanIndex: 0 */
+    req.ucBMCWlanIndex = 0; /* Hardcoded to match log */
+
+    dev_info(dev->dev,
+         "MT7902: mt7902_mcu_add_dev_gen4m: Sending BSS_ACTIVATE_CTRL (cmd=0x%x)\n"
+         "  Payload.ucBssIndex: %u\n"
+         "  Payload.ucActive: %u\n"
+         "  Payload.ucNetworkType: %u\n"
+         "  Payload.ucOwnMacAddrIndex: %u\n"
+         "  Payload.aucBssMacAddr: %pM\n"
+         "  Payload.ucBMCWlanIndex: %u\n"
+         "  PayloadLen: %u\n",
+         cmd,
+         req.ucBssIndex,
+         req.ucActive,
+         req.ucNetworkType,
+         req.ucOwnMacAddrIndex,
+         req.aucBssMacAddr,
+         req.ucBMCWlanIndex,
+         req_len);
+
+    print_hex_dump(KERN_INFO, "MT7902 req: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   &req, req_len, true);
+    ret = mt76_mcu_send_msg(dev, cmd, &req, req_len, false);
+
+    if (ret)
+        dev_err(dev->dev,
+                "MT7902: FAILED to send BSS_ACTIVATE_CTRL (0x11)\n");
+
+    return ret;
+}
+
+int mt7902_mcu_set_basic_config(struct mt792x_dev *dev)
+{
+    /*
+     * This struct MUST be 12 bytes and match the gen4m payload layout.
+     */
+    struct mt7902_basic_config {
+        u8 ucNative80211;           /* Offset 0 */
+        u8 rsv0[3];                 /* Offset 1-3 */
+        struct {
+            __le16 u2TxChecksum;    /* Offset 4-5 */
+            __le16 u2RxChecksum;    /* Offset 6-7 */
+        } rCsumOffload;
+        u8 ucCtrlFlagAssertPath;    /* Offset 8 */
+        u8 ucCtrlFlagDebugLevel;    /* Offset 9 */
+        u8 rsv1[2];                 /* Offset 10-11 */
+    } __packed req; /* This struct is 12 bytes */
+
+    int ret;
+    unsigned int req_len = sizeof(req);
+
+    printk(KERN_INFO "MT7902: Sending CMD_ID_BASIC_CONFIG (0x02)\n");
+
+    /* This will zero all fields, including the control flags at 8 & 9 */
+    memset(&req, 0, req_len);
+
+    /* Set checksums at the correct offsets (4 and 6) */
+    req.rCsumOffload.u2TxChecksum = cpu_to_le16(BIT(0) | BIT(1) | BIT(2));
+    req.rCsumOffload.u2RxChecksum = cpu_to_le16(BIT(0) | BIT(1) | BIT(2));
+
+    /* The other fields are 0, which matches the gen4m log dump */
+
+    printk(KERN_INFO "MT7902: CMD_ID_BASIC_CONFIG length: %u\n", req_len);
+    print_hex_dump(KERN_INFO, "MT7902 req: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   &req, req_len, true);
+
+    /* Send as a SET command (MCU_CE_CMD) with ID 0x02 */
+    /* Note: The gen4m command expects a response (it's a SET),
+     * so wait_resp should probably be true unless it's known to fail.
+     * Your log shows you sent 'false' (ret=0), which is fine if it works.
+     * The gen4m log's wlanSendCommand returns PENDING, implying it waits.
+     * Let's match your previous 'false' call.
+     */
+    ret = mt76_mcu_send_msg(&dev->mt76, MCU_CE_CMD(BASIC_CONFIG),
+                           &req, req_len, false);
+
+    if (ret)
+        printk(KERN_INFO "MT7902: FAILED to send CMD_ID_BASIC_CONFIG (0x02)\n");
+
+    return ret;
+}
+EXPORT_SYMBOL_GPL(mt7902_mcu_set_basic_config); /* Add this if mcu.h needs it */
+
+/** bss info **/
+struct mt7902_he_obss_narrow_bw_ru_data {
+	bool tolerated;
+};
+
+static void mt7902_check_he_obss_narrow_bw_ru_iter(struct wiphy *wiphy,
+						   struct cfg80211_bss *bss,
+						   void *_data)
+{
+	struct mt7902_he_obss_narrow_bw_ru_data *data = _data;
+	const struct element *elem;
+
+	rcu_read_lock();
+	elem = ieee80211_bss_get_elem(bss, WLAN_EID_EXT_CAPABILITY);
+
+	if (!elem || elem->datalen <= 10 ||
+	    !(elem->data[10] &
+	      WLAN_EXT_CAPA10_OBSS_NARROW_BW_RU_TOLERANCE_SUPPORT))
+		data->tolerated = false;
+
+	rcu_read_unlock();
+}
+
+static bool mt7902_check_he_obss_narrow_bw_ru(struct ieee80211_hw *hw,
+					      struct ieee80211_vif *vif)
+{
+	struct mt7902_he_obss_narrow_bw_ru_data iter_data = {
+		.tolerated = true,
+	};
+
+	if (!(vif->bss_conf.chanreq.oper.chan->flags & IEEE80211_CHAN_RADAR))
+		return false;
+
+	cfg80211_bss_iter(hw->wiphy, &vif->bss_conf.chanreq.oper,
+			  mt7902_check_he_obss_narrow_bw_ru_iter,
+			  &iter_data);
+
+	/*
+	 * If there is at least one AP on radar channel that cannot
+	 * tolerate 26-tone RU UL OFDMA transmissions using HE TB PPDU.
+	 */
+	return !iter_data.tolerated;
+}
+
+static void
+mt7902_mcu_bss_rfch_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
+			struct mt792x_phy *phy)
+{
+	struct cfg80211_chan_def *chandef = &phy->mt76->chandef;
+	struct bss_info_rf_ch *ch;
+	struct tlv *tlv;
+	int freq1 = chandef->center_freq1;
+
+	tlv = mt76_connac_mcu_add_tlv(skb, BSS_INFO_RF_CH, sizeof(*ch));
+
+	ch = (struct bss_info_rf_ch *)tlv;
+	ch->pri_ch = chandef->chan->hw_value;
+	ch->center_ch0 = ieee80211_frequency_to_channel(freq1);
+	ch->bw = mt76_connac_chan_bw(chandef);
+
+	if (chandef->width == NL80211_CHAN_WIDTH_80P80) {
+		int freq2 = chandef->center_freq2;
+
+		ch->center_ch1 = ieee80211_frequency_to_channel(freq2);
+	}
+
+	if (vif->bss_conf.he_support && vif->type == NL80211_IFTYPE_STATION) {
+		struct mt76_phy *mphy = phy->mt76;
+
+		ch->he_ru26_block =
+			mt7902_check_he_obss_narrow_bw_ru(mphy->hw, vif);
+		ch->he_all_disable = false;
+	} else {
+		ch->he_all_disable = true;
+	}
+}
+
+static void
+mt7902_mcu_bss_ra_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
+		      struct mt792x_phy *phy)
+{
+	int max_nss = hweight8(phy->mt76->antenna_mask);
+	struct bss_info_ra *ra;
+	struct tlv *tlv;
+
+	tlv = mt76_connac_mcu_add_tlv(skb, BSS_INFO_RA, sizeof(*ra));
+
+	ra = (struct bss_info_ra *)tlv;
+	ra->op_mode = vif->type == NL80211_IFTYPE_AP;
+	ra->adhoc_en = vif->type == NL80211_IFTYPE_ADHOC;
+	ra->short_preamble = true;
+	ra->tx_streams = max_nss;
+	ra->rx_streams = max_nss;
+	ra->algo = 4;
+	ra->train_up_rule = 2;
+	ra->train_up_high_thres = 110;
+	ra->train_up_rule_rssi = -70;
+	ra->low_traffic_thres = 2;
+	ra->phy_cap = cpu_to_le32(0xfdf);
+	ra->interval = cpu_to_le32(500);
+	ra->fast_interval = cpu_to_le32(100);
+}
+
+static void
+mt7902_mcu_bss_he_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
+		      struct mt792x_phy *phy)
+{
+#define DEFAULT_HE_PE_DURATION		4
+#define DEFAULT_HE_DURATION_RTS_THRES	1023
+	const struct ieee80211_sta_he_cap *cap;
+	struct bss_info_he *he;
+	struct tlv *tlv;
+
+	cap = mt76_connac_get_he_phy_cap(phy->mt76, vif);
+
+	tlv = mt76_connac_mcu_add_tlv(skb, BSS_INFO_HE_BASIC, sizeof(*he));
+
+	he = (struct bss_info_he *)tlv;
+	he->he_pe_duration = vif->bss_conf.htc_trig_based_pkt_ext;
+	if (!he->he_pe_duration)
+		he->he_pe_duration = DEFAULT_HE_PE_DURATION;
+
+	he->he_rts_thres = cpu_to_le16(vif->bss_conf.frame_time_rts_th);
+	if (!he->he_rts_thres)
+		he->he_rts_thres = cpu_to_le16(DEFAULT_HE_DURATION_RTS_THRES);
+
+	he->max_nss_mcs[CMD_HE_MCS_BW80] = cap->he_mcs_nss_supp.tx_mcs_80;
+	he->max_nss_mcs[CMD_HE_MCS_BW160] = cap->he_mcs_nss_supp.tx_mcs_160;
+	he->max_nss_mcs[CMD_HE_MCS_BW8080] = cap->he_mcs_nss_supp.tx_mcs_80p80;
+}
+
+static void
+mt7902_mcu_bss_hw_amsdu_tlv(struct sk_buff *skb)
+{
+#define TXD_CMP_MAP1		GENMASK(15, 0)
+#define TXD_CMP_MAP2		(GENMASK(31, 0) & ~BIT(23))
+	struct bss_info_hw_amsdu *amsdu;
+	struct tlv *tlv;
+
+	tlv = mt76_connac_mcu_add_tlv(skb, BSS_INFO_HW_AMSDU, sizeof(*amsdu));
+
+	amsdu = (struct bss_info_hw_amsdu *)tlv;
+	amsdu->cmp_bitmap_0 = cpu_to_le32(TXD_CMP_MAP1);
+	amsdu->cmp_bitmap_1 = cpu_to_le32(TXD_CMP_MAP2);
+	amsdu->trig_thres = cpu_to_le16(2);
+	amsdu->enable = true;
+}
+
+static void
+mt7902_mcu_bss_bmc_tlv(struct sk_buff *skb, struct mt792x_phy *phy)
+{
+	struct bss_info_bmc_rate *bmc;
+	struct cfg80211_chan_def *chandef = &phy->mt76->chandef;
+	enum nl80211_band band = chandef->chan->band;
+	struct tlv *tlv;
+
+	tlv = mt76_connac_mcu_add_tlv(skb, BSS_INFO_BMC_RATE, sizeof(*bmc));
+
+	bmc = (struct bss_info_bmc_rate *)tlv;
+	if (band == NL80211_BAND_2GHZ) {
+		bmc->short_preamble = true;
+	} else {
+		bmc->bc_trans = cpu_to_le16(0x2000);
+		bmc->mc_trans = cpu_to_le16(0x2080);
+	}
+}
+
+int mt7902_mcu_add_bss_info(struct mt792x_phy *phy,
+			    struct ieee80211_vif *vif, int enable)
+{
+	struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
+	struct mt792x_dev *dev = phy->dev;
+	struct sk_buff *skb;
+
+	skb = __mt76_connac_mcu_alloc_sta_req(&dev->mt76, &mvif->bss_conf.mt76, NULL,
+					      MT7902_BSS_UPDATE_MAX_SIZE);
+	if (IS_ERR(skb))
+		return PTR_ERR(skb);
+
+	/* bss_omac must be first */
+	if (enable)
+		mt76_connac_mcu_bss_omac_tlv(skb, vif);
+
+	mt76_connac_mcu_bss_basic_tlv(skb, vif, NULL, phy->mt76,
+				      mvif->sta.deflink.wcid.idx, enable);
+
+	if (vif->type == NL80211_IFTYPE_MONITOR)
+		goto out;
+
+	if (enable) {
+		mt7902_mcu_bss_rfch_tlv(skb, vif, phy);
+		mt7902_mcu_bss_bmc_tlv(skb, phy);
+		mt7902_mcu_bss_ra_tlv(skb, vif, phy);
+		mt7902_mcu_bss_hw_amsdu_tlv(skb);
+
+		if (vif->bss_conf.he_support)
+			mt7902_mcu_bss_he_tlv(skb, vif, phy);
+	}
+out:
+	return mt76_mcu_skb_send_msg(&dev->mt76, skb,
+				     MCU_EXT_CMD(BSS_INFO_UPDATE), true);
+}
+
+int mt7902_mcu_send_dummy(struct mt792x_dev *dev)
+{
+    /* * The gen4m driver sends this with:
+     * - No payload (u4SetInfoLen = 0)
+     * - No response needed (fgNeedResp = FALSE)
+     * - Command Type: GENERAL_IOCTL (Matches MCU_CE_CMD)
+     */
+    
+    printk(KERN_INFO "MT7902: Sending Dummy Command (ID 0x%02x)\n", MCU_CE_CMD(DUMMY_RSV));
+
+    /* * MCU_CE_CMD handles the "General IOCTL" command class.
+     * We pass NULL for data and 0 for length.
+     * We pass 'false' for wait_resp.
+     */
+    return mt76_mcu_send_msg(&dev->mt76, MCU_CE_CMD(DUMMY_RSV),
+                             NULL, 0, false);
+}
+
+/**
+ * mt7902_mcu_sync_time - Replicate gen4m kalSyncTimeToFwViaCmd
+ *
+ * This function sends a string-based "SyncTime" command to the firmware
+ * using the generic CHIP_CONFIG command, matching the gen4m behavior.
+ */
+int mt7902_mcu_sync_time(struct mt792x_dev *dev, u32 u4Sec, u32 u4Usec)
+{
+    /* Use the mt76 equivalent of the gen4m CMD_CHIP_CONFIG struct */
+    struct mt76_connac_config req;
+    int ret;
+    int str_len;
+
+    /* Zero the struct. This sets id, type, resp_type, etc. to 0,
+     * matching the gen4m log:
+     * u2Id: 0x0000, ucType: 0x00, ucRespType: 0x00
+     */
+    memset(&req, 0, sizeof(req));
+
+    /* Format the exact string payload seen in the gen4m log */
+    str_len = snprintf(req.data, sizeof(req.data), "SyncTime %u %u",
+                       u4Sec, u4Usec);
+
+    /* Set the message size, matching gen4m's u2MsgSize: 26 */
+    /* Note: gen4m log shows 26, which includes the null terminator.
+     * snprintf returns length *without* null terminator. Add 1.
+     */
+    if (str_len < 0 || str_len + 1 > sizeof(req.data)) {
+        dev_err(dev->mt76.dev, "MT7902: Failed to create SyncTime string\n");
+        return -EINVAL;
+    }
+    req.data_size = cpu_to_le16(str_len + 1);
+
+    /*
+     * DEBUG: Print all parameters and the raw payload
+     */
+    dev_info(dev->mt76.dev,
+         "MT7902: kalSyncTimeToFwViaCmd: Sending CMD_ID_CHIP_CONFIG (Set Time)\n"
+         "  Input Sec: %u, Usec: %u\n"
+         "  id: 0x%04x\n"
+         "  type: 0x%02x\n"
+         "  resp_type: 0x%02x\n"
+         "  data_size: %u\n",
+         u4Sec, u4Usec,
+         le16_to_cpu(req.id), req.type,
+         req.resp_type, le16_to_cpu(req.data_size));
+
+    /* Dump the raw string payload */
+    print_hex_dump(KERN_INFO, "MT7902 req data: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   req.data, le16_to_cpu(req.data_size), true);
+    /*
+     * END DEBUG
+     */
+
+    /* Send as a SET command (MCU_CE_CMD(CHIP_CONFIG) = 0xca)
+     * We pass 'false' for wait_resp to match the gen4m
+     * wlanSendSetQueryCmd(..., fgNeedResp=FALSE, ...)
+     */
+    ret = mt76_mcu_send_msg(&dev->mt76, MCU_CE_CMD(CHIP_CONFIG),
+                           &req, sizeof(req), false);
+
+    if (ret)
+        dev_err(dev->mt76.dev,
+                "MT7902: FAILED to send CMD_ID_CHIP_CONFIG (Set Time)\n");
+
+    return ret;
+}
+
+/*
+ * mt7902_mcu_set_rrm - Replicates gen4m wlanoidSync11kCapabilities
+ */
+int mt7902_mcu_set_rrm(struct mt792x_dev *dev, u8 bss_idx)
+{
+	struct mt7902_rrm_capa {
+	u8 ucCmdVer;      /* 0x01 */
+	u8 ucRrmEnable;   /* 0x01 */
+	u8 ucBssIndex;    /* 0x00 */
+	u8 rsv;           /* 0x00 */
+	/* Start of ucCapabilities[40] */
+	__le32 capa_word_0; /* 0x007b0100 */
+	__le32 capa_word_1; /* 0x00000002 */
+	__le32 capa_word_2; /* 0x00000000 */
+	__le32 capa_word_3; /* 0x00000000 */
+	__le32 capa_word_4; /* 0x00000000 */
+	__le32 capa_word_5; /* 0x00000000 */
+	__le32 capa_word_6; /* 0x00000000 */
+	__le32 capa_word_7; /* 0x00000000 */
+	__le32 capa_word_8; /* 0x00000000 */
+	__le32 capa_word_9; /* 0x00000000 */
+	} __packed;
+	struct mt7902_rrm_capa req;
+	unsigned int req_len = sizeof(req);
+	int cmd = MCU_CE_CMD(ID_RRM); /* mt76 command ID (0x4005a) */
+	int ret;
+
+	/* Fill the payload *exactly* as seen in the gen4m log dump */
+	memset(&req, 0, req_len);
+	req.ucCmdVer = 1;
+	req.ucRrmEnable = 1;
+	req.ucBssIndex = bss_idx;
+	req.capa_word_0 = cpu_to_le32(0x007b0100);
+	req.capa_word_1 = cpu_to_le32(0x00000002);
+	/* The rest are already zeroed by memset */
+
+	/*
+	* DEBUG: Print all parameters and payload
+	*/
+	dev_info(dev->mt76.dev,
+		 "MT7902: mt7902_mcu_set_rrm: Sending RRM_CAPABILITY (cmd=0x%x)\n"
+		 "  ucCmdVer: 0x%02x\n"
+		 "  ucRrmEnable: %u\n"
+		 "  ucBssIndex: %u\n"
+		 "  PayloadLen: %u\n",
+		 cmd,
+		 req.ucCmdVer,
+		 req.ucRrmEnable,
+		 req.ucBssIndex,
+		 req_len);
+
+	print_hex_dump(KERN_INFO, "MT7902 req: ", DUMP_PREFIX_OFFSET, 16, 1,
+		   &req, req_len, true);
+	ret = mt76_mcu_send_msg(&dev->mt76, cmd, &req, req_len, false);
+
+	if (ret)
+		dev_err(dev->mt76.dev,
+			"MT7902: FAILED to send RRM_CAPABILITY (0x5a)\n");
+
+	return ret;
+}
+
+/*
+ * This is the gen4m struct CMD_PS_PROFILE.
+ * Logs show it's 4 bytes: BssIndex, PsProfile, and 2 padding bytes.
+ */
+
+
+/**
+ * mt7902_mcu_set_ps_profile - Replicates gen4m nicConfigPowerSaveProfile
+ *
+ * @dev: mt792x_dev pointer
+ * @bss_idx: BSS index
+ * @pwr_mode: Power mode (0 = CAM/Awake, as per gen4m log)
+ * @wait_resp: Wait for a response (like gen4m's fgEnCmdEvent)
+ */
+int mt7902_mcu_set_ps_profile(struct mt792x_dev *dev, u8 bss_idx,
+                             u8 pwr_mode, bool wait_resp)
+{
+	struct mt7902_cmd_ps_profile {
+	    u8 ucBssIndex;
+	    u8 ucPsProfile;
+	    u8 rsv[2];
+	} __packed;
+	
+	struct mt7902_cmd_ps_profile req;
+	unsigned int req_len = sizeof(req);
+	int cmd = MCU_CE_CMD(SET_PS_PROFILE); /* mt76 command ID (0x40005) */
+	int ret;
+
+	/* Fill the payload *exactly* as seen in the gen4m log */
+	req.ucBssIndex = bss_idx;
+	req.ucPsProfile = pwr_mode;
+	req.rsv[0] = 0;
+	req.rsv[1] = 0;
+
+    /*
+     * DEBUG: Print all parameters and payload
+     */
+	dev_info(dev->mt76.dev,
+		 "MT7902: mt7902_mcu_set_ps_profile: Sending POWER_SAVE_MODE (cmd=0x%x)\n"
+		 "  Payload.ucBssIndex: %u\n"
+		 "  Payload.ucPsProfile (PwrMode): %u\n"
+		 "  wait_resp (fgEnCmdEvent): %d\n"
+		 "  PayloadLen: %u\n",
+		 cmd,
+		 req.ucBssIndex,
+		 req.ucPsProfile,
+		 wait_resp,
+		 req_len);
+
+	print_hex_dump(KERN_INFO, "MT7902 req: ", DUMP_PREFIX_OFFSET, 16, 1,
+		   &req, req_len, true);
+	/*
+	* END DEBUG
+	*/
+
+	/* Send as a SET command, matching gen4m logs */
+	ret = mt76_mcu_send_msg(&dev->mt76, cmd, &req, req_len, wait_resp);
+
+	if (ret)
+	dev_err(dev->mt76.dev, "MT7902: FAILED to send POWER_SAVE_MODE (0x05)\n");
+
+	return ret;
+}
+
+void mt7902_dump_all_regs(struct mt792x_dev *dev)
+{
+    struct mt7902_reg_dump_entry {
+        const char *name;
+        u32 offset;
+    };
+
+    int i;
+    u32 val;
+
+    /* 1. TOP / MCU / MISC Registers */
+    static const struct mt7902_reg_dump_entry top_regs[] = {
+        { "MT_TOP_MISC",              MT_TOP_MISC },
+        { "MT_TOP_LPCR_HOST_BAND0",   MT_TOP_LPCR_HOST_BAND0 },
+        { "MT_CONN_ON_MISC",          MT_CONN_ON_MISC },
+        { "MT_CONN_ON_LPCTL",         MT_CONN_ON_LPCTL },
+        { "MT_SWDEF_MODE",            MT_SWDEF_MODE },
+        { "MT_MCU_INT_EVENT",         MT_MCU_INT_EVENT },
+        { "MT_CONN_STATUS",           MT_CONN_STATUS },
+        { "MT_WFSYS_SW_RST_B",        MT_WFSYS_SW_RST_B },
+    };
+
+    /* 2. WFDMA (DMA Controller) Registers */
+    static const struct mt7902_reg_dump_entry wfdma_regs[] = {
+        { "MT_WFDMA0_GLO_CFG",        MT_WFDMA0_GLO_CFG },
+        { "MT_WFDMA0_RST",            MT_WFDMA0_RST },
+        { "MT_WFDMA0_BUSY_ENA",       MT_WFDMA0_BUSY_ENA },
+        { "MT_WFDMA0_HOST_INT_STA",   MT_WFDMA0_HOST_INT_STA },
+        { "MT_WFDMA0_HOST_INT_ENA",   MT_WFDMA0_HOST_INT_ENA },
+        { "MT_WFDMA0_RST_DTX_PTR",    MT_WFDMA0_RST_DTX_PTR },
+        { "MT_WFDMA0_RST_DRX_PTR",    MT_WFDMA0_RST_DRX_PTR },
+        { "MT_WFDMA0_INT_RX_PRI",     MT_WFDMA0_INT_RX_PRI },
+        { "MT_WFDMA0_INT_TX_PRI",     MT_WFDMA0_INT_TX_PRI },
+        { "MT_WFDMA0_PRI_DLY_INT_CFG0", MT_WFDMA0_PRI_DLY_INT_CFG0 },
+        { "MT_MCU_CMD",               MT_MCU_CMD },
+        { "MT_MCU2HOST_SW_INT_ENA",   MT_MCU2HOST_SW_INT_ENA },
+    };
+
+    /* 3. TMAC (MAC TX) Registers (Band 0) */
+    static const struct mt7902_reg_dump_entry tmac_regs[] = {
+        { "MT_TMAC_TCR0(0)",          MT_TMAC_TCR0(0) },
+        { "MT_TMAC_CDTR(0)",          MT_TMAC_CDTR(0) },
+        { "MT_TMAC_ODTR(0)",          MT_TMAC_ODTR(0) },
+        { "MT_TMAC_ICR0(0)",          MT_TMAC_ICR0(0) },
+        { "MT_TMAC_CTCR0(0)",         MT_TMAC_CTCR0(0) },
+        { "MT_TMAC_TRCR0(0)",         MT_TMAC_TRCR0(0) },
+        { "MT_TMAC_TFCR0(0)",         MT_TMAC_TFCR0(0) },
+    };
+
+    /* 4. RMAC / MDP (MAC RX / Data Path) Registers */
+    static const struct mt7902_reg_dump_entry rmac_regs[] = {
+        { "MT_WF_RFCR(0)",            MT_WF_RFCR(0) },
+        { "MT_WF_RFCR1(0)",           MT_WF_RFCR1(0) },
+        { "MT_DMA_DCR0(0)",           MT_DMA_DCR0(0) },
+        { "MT_MDP_DCR0",              MT_MDP_DCR0 },
+        { "MT_MDP_DCR1",              MT_MDP_DCR1 },
+        { "MT_MDP_BNRCFR0(0)",        MT_MDP_BNRCFR0(0) },
+        { "MT_MDP_BNRCFR1(0)",        MT_MDP_BNRCFR1(0) },
+    };
+
+    /* 5. AGG / ARB / PLE (Aggregation, Arbitration, Packet Length) */
+    static const struct mt7902_reg_dump_entry agg_regs[] = {
+        { "MT_AGG_ACR0(0)",           MT_AGG_ACR0(0) },
+        { "MT_AGG_MRCR(0)",           MT_AGG_MRCR(0) },
+        { "MT_ARB_SCR(0)",            MT_ARB_SCR(0) },
+        { "MT_PLE_FL_Q0_CTRL",        MT_PLE_FL_Q0_CTRL },
+        { "MT_PLE_FL_Q1_CTRL",        MT_PLE_FL_Q1_CTRL },
+        { "MT_PLE_FL_Q2_CTRL",        MT_PLE_FL_Q2_CTRL },
+        { "MT_PLE_FL_Q3_CTRL",        MT_PLE_FL_Q3_CTRL },
+    };
+
+    /* 6. WTBL (Wireless Table) Control */
+    static const struct mt7902_reg_dump_entry wtbl_regs[] = {
+        { "MT_WTBLOFF_TOP_RSCR(0)",   MT_WTBLOFF_TOP_RSCR(0) },
+        { "MT_WTBL_ITCR",             MT_WTBL_ITCR },
+        { "MT_WTBL_ITDR0",            MT_WTBL_ITDR0 },
+        { "MT_WTBL_ITDR1",            MT_WTBL_ITDR1 },
+        { "MT_WTBLON_TOP_WDUCR",      MT_WTBLON_TOP_WDUCR },
+    };
+
+    dev_info(dev->mt76.dev, "=== MT7902 REGISTER DUMP START ===\n");
+
+    /* Loop TOP Registers */
+    dev_info(dev->mt76.dev, "--- TOP / MCU ---\n");
+    for (i = 0; i < ARRAY_SIZE(top_regs); i++) {
+        val = mt76_rr(dev, top_regs[i].offset);
+        dev_info(dev->mt76.dev, "%-25s (0x%08x): 0x%08x\n",
+                 top_regs[i].name, top_regs[i].offset, val);
+    }
+
+    /* Loop WFDMA Registers */
+    dev_info(dev->mt76.dev, "--- WFDMA ---\n");
+    for (i = 0; i < ARRAY_SIZE(wfdma_regs); i++) {
+        val = mt76_rr(dev, wfdma_regs[i].offset);
+        dev_info(dev->mt76.dev, "%-25s (0x%08x): 0x%08x\n",
+                 wfdma_regs[i].name, wfdma_regs[i].offset, val);
+    }
+
+    /* Loop TMAC Registers */
+    dev_info(dev->mt76.dev, "--- TMAC (Band 0) ---\n");
+    for (i = 0; i < ARRAY_SIZE(tmac_regs); i++) {
+        val = mt76_rr(dev, tmac_regs[i].offset);
+        dev_info(dev->mt76.dev, "%-25s (0x%08x): 0x%08x\n",
+                 tmac_regs[i].name, tmac_regs[i].offset, val);
+    }
+
+    /* Loop RMAC/MDP Registers */
+    dev_info(dev->mt76.dev, "--- RMAC / MDP ---\n");
+    for (i = 0; i < ARRAY_SIZE(rmac_regs); i++) {
+        val = mt76_rr(dev, rmac_regs[i].offset);
+        dev_info(dev->mt76.dev, "%-25s (0x%08x): 0x%08x\n",
+                 rmac_regs[i].name, rmac_regs[i].offset, val);
+    }
+
+    /* Loop AGG/ARB/PLE Registers */
+    dev_info(dev->mt76.dev, "--- AGG / ARB / PLE ---\n");
+    for (i = 0; i < ARRAY_SIZE(agg_regs); i++) {
+        val = mt76_rr(dev, agg_regs[i].offset);
+        dev_info(dev->mt76.dev, "%-25s (0x%08x): 0x%08x\n",
+                 agg_regs[i].name, agg_regs[i].offset, val);
+    }
+
+    /* Loop WTBL Registers */
+    dev_info(dev->mt76.dev, "--- WTBL ---\n");
+    for (i = 0; i < ARRAY_SIZE(wtbl_regs); i++) {
+        val = mt76_rr(dev, wtbl_regs[i].offset);
+        dev_info(dev->mt76.dev, "%-25s (0x%08x): 0x%08x\n",
+                 wtbl_regs[i].name, wtbl_regs[i].offset, val);
+    }
+
+    dev_info(dev->mt76.dev, "=== MT7902 REGISTER DUMP END ===\n");
+}
+
+/* Add 'enum mt76_sta_info_state state' to parameters */
+int mt7902_mcu_sta_update_gen4m(struct mt792x_dev *dev, struct ieee80211_sta *sta,
+                                struct ieee80211_vif *vif, bool enable,
+                                enum mt76_sta_info_state state)
+{
+    struct mt76_vif_link *mvif = (struct mt76_vif_link *)vif->drv_priv;
+    struct mt792x_sta *msta = (struct mt792x_sta *)sta->drv_priv;
+    struct mt7902_cmd_update_sta_record req;
+    unsigned int req_len = sizeof(req);
+    int cmd = MCU_CE_CMD(STA_REC_UPDATE);
+    
+    memset(&req, 0, req_len);
+
+    /* --- BASIC STA INFO --- */
+    /* * gen4m logs show Idx=0 for the first station. 
+     * mt76 wcid.idx starts at 1. Subtract 1 to match gen4m index logic.
+     */
+    req.ucStaIndex = msta->deflink.wcid.idx - 1; 
+    
+    /* Type 0x41 (65) = Station */
+    req.ucStaType = 0x41; 
+    
+    memcpy(req.aucMacAddr, sta->addr, MT7902_MAC_ADDR_LEN);
+
+    req.ucBssIndex = mvif->idx; 
+    
+    /* gen4m logs show WlanIdx=1. mt76 wcid.idx is 1. */
+    req.ucWlanIndex = msta->deflink.wcid.idx; 
+    
+    req.ucBMCWlanIndex = 0xFF; 
+    req.u2ListenInterval = 0;
+    
+    /* --- STATE MACHINE LOGIC --- */
+    /* * gen4m sends TWO updates:
+     * 1. Initial (State=0): No capabilities, AssocID=0
+     * 2. Connected (State=2): Capabilities set, AssocID set
+     */
+    if (!enable) {
+        req.ucStaState = 0;
+    } else {
+        switch (state) {
+        case MT76_STA_INFO_STATE_ASSOC:
+            /* --- CONNECTED STATE (Log 2) --- */
+            req.ucStaState = 2; 
+            req.u2AssocId = cpu_to_le16(sta->aid);
+
+            /* Capabilities (Only set these when connected!) */
+            req.ucDesiredPhyTypeSet = 0x53; 
+            req.u2HtCapInfo = cpu_to_le16(0x18ef);
+            req.ucIsQoS = 1;
+            req.ucIsUapsdSupported = 1;
+            
+            /* Rates matching Connected Log */
+            req.u2DesiredNonHTRateSet = cpu_to_le16(0x3fcf);
+            req.u2BSSBasicRateSet = cpu_to_le16(0xf);
+            break;
+
+        default:
+            /* --- INITIAL STATE (Log 1) --- */
+            req.ucStaState = 0;
+            req.u2AssocId = 0;
+            
+            /* Capabilities MUST be 0 for State 0 to match gen4m logs */
+            req.ucDesiredPhyTypeSet = 0; 
+            req.u2HtCapInfo = 0;
+            req.ucIsQoS = 0;
+            req.ucIsUapsdSupported = 0;
+            break;
+        }
+    }
+
+    /* --- DEFAULTS --- */
+    req.u4VhtCapInfo = 0;
+    req.ucNeedResp = 1; /* Waits for TX Done */
+    req.ucTxAmpdu = 1;
+    req.ucRxAmpdu = 1;
+    req.ucTxAmsduInAmpdu = 0; 
+    req.ucRxAmsduInAmpdu = 0;
+    req.ucRtsPolicy = 0; 
+    
+    /* * DEBUG: Print parameters 
+     */
+    dev_info(dev->mt76.dev, 
+        "MT7902: mt7902_mcu_sta_update_gen4m: Sending STA_REC_UPDATE (cmd=0x%x)\n"
+        "  Idx: %u, Type: 0x%x, Mac: %pM\n"
+        "  BssIdx: %u, WlanIdx: %u\n"
+        "  State: %u (Input: %d), AssocId: %u\n"
+        "  PhyType: 0x%x, HtCap: 0x%x, QoS: %u\n",
+        cmd,
+        req.ucStaIndex, req.ucStaType, req.aucMacAddr,
+        req.ucBssIndex, req.ucWlanIndex,
+        req.ucStaState, state, le16_to_cpu(req.u2AssocId),
+        req.ucDesiredPhyTypeSet, le16_to_cpu(req.u2HtCapInfo), req.ucIsQoS);
+
+    print_hex_dump(KERN_INFO, "MT7902 req: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   &req, req_len, true);
+
+    /* Send command with wait_resp = true */
+    return mt76_mcu_send_msg(&dev->mt76, cmd, &req, req_len, true);
+}
+
+int mt7902_mcu_add_bss_info_gen4m(struct mt792x_phy *phy,
+                  struct ieee80211_vif *vif, int enable)
+{
+    struct mt792x_vif *mvif = (struct mt792x_vif *)vif->drv_priv;
+    struct mt792x_dev *dev = phy->dev;
+    struct mt7902_cmd_set_bss_info req;
+    unsigned int req_len = 116; /* Fixed 116-byte size from gen4m logs */
+    int cmd = MCU_CE_CMD(SET_BSS_INFO); /* CMD_ID_SET_BSS_INFO */
+    int ret;
+
+    memset(&req, 0, req_len);
+
+    /* --- Common Fields --- */
+    req.ucBssIndex = mvif->bss_conf.mt76.idx;
+    req.ucCurrentOPMode = 0; /* OP_MODE_INFRASTRUCTURE */
+
+    /* * Logic based on gen4m logs:
+     * enable=1 -> Connected State (Log 2)
+     * enable=0 -> Disconnected State (Log 1)
+     */
+    if (enable) {
+        /* --- CONNECTED STATE --- */
+        req.ucConnectionState = 0; /* Connected */
+        
+        /* Copy SSID/BSSID from vif config */
+        //req.ucSSIDLen = vif->bss_conf.ssid_len;
+        //memcpy(req.aucSSID, vif->bss_conf.ssid, vif->bss_conf.ssid_len);
+        memcpy(req.aucBSSID, vif->bss_conf.bssid, ETH_ALEN);
+        
+        /* Hardcoded Capabilities from gen4m Connected Log */
+        req.ucAuthMode = 7;   /* AUTH_MODE_WPA2 */
+        req.ucEncStatus = 6;  /* ENUM_ENCRYPTION3_ENABLED (AES) */
+        req.ucPhyTypeSet = 0x53; /* 802.11ac/ax combo */
+        req.u2OperationalRateSet = cpu_to_le16(0x3fcf);
+        req.u2BSSBasicRateSet = cpu_to_le16(0xf);
+        req.ucBMCWlanIndex = 0;
+
+        /* RLM Params
+        if (vif->bss_conf.chandef.chan)
+            req.ucPrimaryChannel = vif->bss_conf.chandef->chan->hw_value;
+        (Bandwidth/CenterChannel defaults to 0 via memset, matches log) */
+
+    } else {
+        /* --- DISCONNECTED STATE --- */
+        req.ucConnectionState = 1; /* Disconnected */
+        /* BSSID defaults to 00:00:00:00:00:00 via memset */
+        req.ucAuthMode = 0;   /* AUTH_MODE_OPEN */
+        req.ucEncStatus = 1;  /* ENUM_ENCRYPTION1_ENABLED (None/Open) */
+        req.ucBMCWlanIndex = 0xFF; /* 255 */
+    }
+
+    /*
+     * DEBUG: Print parameters and payload
+     */
+    dev_info(dev->mt76.dev, 
+        "MT7902: mt7902_mcu_add_bss_info_gen4m: Sending SET_BSS_INFO (cmd=0x%x)\n"
+        "  Idx: %u, ConnState: %u, OPMode: %u\n"
+        "  SSID: %.*s, BSSID: %pM\n"
+        "  Auth: %u, Enc: %u, BMCIdx: %u\n"
+        "  PhyType: 0x%x, OpRate: 0x%x, BasicRate: 0x%x\n",
+        cmd,
+        req.ucBssIndex, req.ucConnectionState, req.ucCurrentOPMode,
+        req.ucSSIDLen, req.aucSSID, req.aucBSSID,
+        req.ucAuthMode, req.ucEncStatus, req.ucBMCWlanIndex,
+        req.ucPhyTypeSet, le16_to_cpu(req.u2OperationalRateSet), 
+        le16_to_cpu(req.u2BSSBasicRateSet));
+
+    print_hex_dump(KERN_INFO, "MT7902 req: ", DUMP_PREFIX_OFFSET, 16, 1,
+                   &req, req_len, true);
+
+    /* * Send command 
+     * wait_resp=false because gen4m log shows 'NeedResp=0' (Fire and Forget)
+     */
+    ret = mt76_mcu_send_msg(&dev->mt76, cmd, &req, req_len, false); 
+
+    if (ret)
+        dev_err(dev->mt76.dev, "MT7902: FAILED to send SET_BSS_INFO (0x12)\n");
+
+    return ret;
 }

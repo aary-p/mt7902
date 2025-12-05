@@ -55,7 +55,10 @@ int mt7921e_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 
 int mt7921e_mac_reset(struct mt792x_dev *dev)
 {
+	const struct mt792x_irq_map *irq_map = dev->irq_map;
 	int i, err;
+	
+	printk("MT7902: mt7921e_mac_reset");
 
 	mt792xe_mcu_drv_pmctrl(dev);
 
@@ -73,7 +76,7 @@ int mt7921e_mac_reset(struct mt792x_dev *dev)
 	mt76_worker_disable(&dev->mt76.tx_worker);
 	napi_disable(&dev->mt76.napi[MT_RXQ_MAIN]);
 	napi_disable(&dev->mt76.napi[MT_RXQ_MCU]);
-	napi_disable(&dev->mt76.napi[MT_RXQ_MCU_WA]);
+	//napi_disable(&dev->mt76.napi[MT_RXQ_MCU_WA]);
 	napi_disable(&dev->mt76.tx_napi);
 
 	mt76_connac2_tx_token_put(&dev->mt76);
